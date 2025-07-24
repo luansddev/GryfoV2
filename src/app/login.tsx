@@ -1,22 +1,36 @@
 import { router } from 'expo-router';
 import React, { useState } from 'react';
 import { ActivityIndicator, Alert, Image, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
+import { signInWithEmailAndPassword } from "firebase/auth";
+import { auth } from '../config/firebaseConfig';
 
 export default function Login() {
     const [email, setEmail] = useState('');
     const [senha, setSenha] = useState('');
     const [isLoading, setIsLoading] = useState(false);
+    const [errorMessage, setErrorMessage] = useState('');
 
-    const voltar = () => {
-        router.back();
-    };
+    const voltar = () => router.back();
 
     const handleLogin = async () => {
         setIsLoading(true);
-        await new Promise(resolve => setTimeout(resolve, 1000)); // Simula delay de rede
-        setIsLoading(false);
-        Alert.alert('Login Simulado', 'Autenticação desativada neste ambiente.');
-        router.replace('/home');
+        setErrorMessage('');
+
+        try {
+            await signInWithEmailAndPassword(auth, email, senha);
+            router.replace('/home');
+        } catch (error: any) {
+            if (
+                error.code === 'auth/user-not-found' ||
+                error.code === 'auth/wrong-password'
+            ) {
+                setErrorMessage('Email ou senha incorretos.');
+            } else {
+                setErrorMessage('Erro ao fazer login, tente novamente.');
+            }
+        } finally {
+            setIsLoading(false);
+        }
     };
 
     const isButtonDisabled = !email || !senha || isLoading;
@@ -29,9 +43,11 @@ export default function Login() {
                 </TouchableOpacity>
                 <Text style={styles.txTst}>Entrar</Text>
             </View>
+
             <View style={styles.boxText}>
                 <Text style={styles.text}>Olá, bem-vindo de volta</Text>
             </View>
+
             <View style={styles.boxInput}>
                 <TextInput
                     placeholder="Email"
@@ -48,7 +64,12 @@ export default function Login() {
                     value={senha}
                     onChangeText={setSenha}
                 />
+
+                {errorMessage !== '' && (
+                    <Text style={styles.errorText}>{errorMessage}</Text>
+                )}
             </View>
+
             <View style={styles.buttonBox}>
                 <TouchableOpacity
                     style={[styles.bt2, { backgroundColor: isButtonDisabled ? 'grey' : 'green' }]}
@@ -70,6 +91,13 @@ export default function Login() {
 }
 
 const styles = StyleSheet.create({
+    errorText: {
+        color: 'red',
+        fontSize: 14,
+        marginBottom: 10,
+        fontFamily: 'GlacialR',
+        textAlign: 'center'
+    },
     conteiner: {
         flex: 1,
         padding: 20,

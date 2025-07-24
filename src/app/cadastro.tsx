@@ -1,6 +1,7 @@
 import { useRouter } from "expo-router";
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Image, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
+import { registerUser } from '../services/auth/registerUser';
 
 export default function Cadastro() {
     const router = useRouter();
@@ -70,12 +71,19 @@ export default function Cadastro() {
     const handleEtapaAnteriorSenha = () => setScreenVisible("cpfemail");
 
     const handleConcluir = async () => {
-        setIsLoading(true);
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        setIsLoading(false);
-        Alert.alert('Finalizado', 'Dados preenchidos corretamente. A lógica de conexão foi removida.');
-        router.replace('/home');
-    };
+  setIsLoading(true);
+
+  const result = await registerUser({ name, sobrenome, email, senha, cpf });
+
+  setIsLoading(false);
+
+  if (result.success) {
+    Alert.alert('Sucesso', 'Cadastro realizado com sucesso!');
+    router.replace('/home'); //Não sei qual é o erro dessa linha, mas ta funcionando, segue o jogo kkk.
+  } else {
+    Alert.alert('Erro', result.error || 'Não foi possível cadastrar o usuário.');
+  }
+};
 
     const btDesativoPrimeiraEtapa = name.trim() === '' || sobrenome.trim() === '';
     const btDesativoSegundaEtapa = !isEmailValid || !isCpfValid || isLoading;

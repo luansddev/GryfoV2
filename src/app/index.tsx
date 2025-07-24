@@ -1,4 +1,4 @@
-//Apenas a tela de início com dois botões
+//Tela de início
 import { router } from "expo-router";
 import { Image, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 export default function Index(){
