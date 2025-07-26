@@ -37,6 +37,7 @@ export default function RootLayout() {
       <Stack.Screen name="index" />       {/* Para src/app/index.tsx */}
       <Stack.Screen name="cadastro" />    {/* Para src/app/cadastro.tsx */}
       <Stack.Screen name="login" />       {/* Para src/app/login.tsx */}
+      <Stack.Screen name="home" />
       {/* Se você tiver outras telas na raiz de 'src/app', adicione-as aqui também. */}
       
       {/* Exemplo se você tivesse uma pasta para abas: */}
