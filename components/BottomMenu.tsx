@@ -28,7 +28,7 @@ export default function BottomMenu() {
           >
             <MaterialIcons
               name={tab.icon as any}
-              size={33}
+              size={28}
               color={isActive ? '#fff' : '#808080'}
             />
           </TouchableOpacity>
