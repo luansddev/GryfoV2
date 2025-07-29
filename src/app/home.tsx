@@ -30,23 +30,28 @@ export default function Home() {
 
   const renderTabBar = (props: any) => (
     <TabBar
-  {...props}
-  renderLabel={({ route, color }) => (
-    <Text style={{
-      fontSize: 24,
-      fontFamily: 'texgyR',
-      color: color
-    }}>
-      {route.title}
-    </Text>
-  )}
-  indicatorStyle={{ backgroundColor: 'black', height: 5, borderRadius: 50 }}
-  style={{ backgroundColor: '#f5f5f5' }}
-  activeColor="black"
-  inactiveColor="#999"
-  pressColor="#f5f5f5"
-/>
-
+      {...props}
+      renderLabel={({ route, color }) => (
+        <Text
+          style={{
+            fontSize: 24,
+            fontFamily: 'texgyR',
+            color: color,
+          }}
+        >
+          {route.title}
+        </Text>
+      )}
+      indicatorStyle={{
+        backgroundColor: 'black',
+        height: 5,
+        borderRadius: 50,
+      }}
+      style={{ backgroundColor: '#f5f5f5' }}
+      activeColor="black"
+      inactiveColor="#999"
+      pressColor="#f5f5f5"
+    />
   );
 
   if (!fontsLoaded) return null;
