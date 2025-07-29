@@ -1,23 +1,25 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { StyleSheet, View, ActivityIndicator, Text } from 'react-native';
 import MapView, { Marker, PROVIDER_GOOGLE, Region } from 'react-native-maps';
 import * as Location from 'expo-location';
+import { useSearchLocation } from '../../context/SearchLocationContext';
 
 export default function Dados() {
-  const [location, setLocation] = useState<Location.LocationObject | null>(null);
+  const [userLocation, setUserLocation] = useState<Location.LocationObject | null>(null);
   const [loading, setLoading] = useState(true);
+  const { location: searchedLocation } = useSearchLocation();
+  const mapRef = useRef<MapView | null>(null);
 
   useEffect(() => {
     (async () => {
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') {
-        console.warn('Permissão para acessar localização negada');
         setLoading(false);
         return;
       }
 
       const loc = await Location.getCurrentPositionAsync({});
-      setLocation(loc);
+      setUserLocation(loc);
       setLoading(false);
     })();
   }, []);
@@ -31,17 +33,9 @@ export default function Dados() {
     );
   }
 
-  if (!location) {
-    return (
-      <View style={styles.centered}>
-        <Text>Não foi possível obter a localização.</Text>
-      </View>
-    );
-  }
-
   const region: Region = {
-    latitude: location.coords.latitude,
-    longitude: location.coords.longitude,
+    latitude: searchedLocation?.latitude || userLocation?.coords.latitude || -23.55,
+    longitude: searchedLocation?.longitude || userLocation?.coords.longitude || -46.63,
     latitudeDelta: 0.01,
     longitudeDelta: 0.01,
   };
@@ -50,12 +44,14 @@ export default function Dados() {
     <View style={styles.container}>
       <MapView
         provider={PROVIDER_GOOGLE}
-        style={{ width: '100%', height: '36%'}}
+        style={{ width: '100%', height: '36%' }}
         region={region}
         showsUserLocation
         showsMyLocationButton
       >
-        {/* Exemplo de marcador (remover depois) */}
+        {searchedLocation && (
+          <Marker coordinate={searchedLocation} />
+        )}
       </MapView>
     </View>
   );
@@ -64,9 +60,6 @@ export default function Dados() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-  },
-  map: {
-    ...StyleSheet.absoluteFillObject,
   },
   centered: {
     flex: 1,

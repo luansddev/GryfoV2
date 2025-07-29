@@ -1,43 +1,66 @@
 import React, { useEffect, useState } from 'react';
-import { View, TextInput, StyleSheet, Text, Platform } from 'react-native';
-import { FontAwesome, Entypo } from '@expo/vector-icons';
+import { View, TextInput, StyleSheet, Text, Platform, Keyboard, TouchableOpacity } from 'react-native';
+import { FontAwesome } from '@expo/vector-icons';
 import FontAwesome6 from '@expo/vector-icons/FontAwesome6';
 import * as Location from 'expo-location';
+import { useSearchLocation } from '../src/context/SearchLocationContext';
 
 export default function TopMenu({ renderTabBar }: { renderTabBar?: () => React.ReactNode }) {
   const [locationName, setLocationName] = useState('Carregando...');
+  const [searchText, setSearchText] = useState('');
+  const [confirmedSearch, setConfirmedSearch] = useState('');
+  const { setLocation } = useSearchLocation();
   
+
   useEffect(() => {
-    (async () => {
-      try {
-        // Solicita permissão
-        const { status } = await Location.requestForegroundPermissionsAsync();
-        if (status !== 'granted') {
-          setLocationName('Permissão negada');
-          return;
-        }
-
-        // Pega localização atual
-        const location = await Location.getCurrentPositionAsync({});
-        const { latitude, longitude } = location.coords;
-
-        // Busca nome da cidade
-        const geocode = await Location.reverseGeocodeAsync({ latitude, longitude });
-
-        if (geocode.length > 0) {
-          const { city, subregion, region } = geocode[0];
-
-          const nomeFormatado = city || subregion || region || 'Localização desconhecida';
-          setLocationName(nomeFormatado);
-        } else {
-          setLocationName('Cidade não encontrada');
-        }
-      } catch (error) {
-        console.error('Erro ao obter localização:', error);
-        setLocationName('Erro de localização');
-      }
-    })();
+    loadUserLocation();
   }, []);
+
+  const loadUserLocation = async () => {
+    const { status } = await Location.requestForegroundPermissionsAsync();
+    if (status !== 'granted') {
+      setLocationName('Permissão negada');
+      return;
+    }
+
+    const location = await Location.getCurrentPositionAsync({});
+    const geocode = await Location.reverseGeocodeAsync(location.coords);
+
+    if (geocode.length > 0) {
+      const { city, subregion, region } = geocode[0];
+      setLocationName(city || subregion || region || 'Localização desconhecida');
+    } else {
+      setLocationName('Cidade não encontrada');
+    }
+
+    setLocation({
+      latitude: location.coords.latitude,
+      longitude: location.coords.longitude,
+    });
+  };
+
+  const handleSearch = async () => {
+    if (!searchText.trim()) return;
+    try {
+      setConfirmedSearch(searchText.trim());
+      const [result] = await Location.geocodeAsync(searchText);
+      if (result) {
+        setLocation({
+          latitude: result.latitude,
+          longitude: result.longitude,
+        });
+      }
+    } catch (error) {
+      console.error('Erro ao buscar localização:', error);
+    }
+  };
+
+  const goToUserLocation = async () => {
+    await loadUserLocation();
+    setSearchText('');
+    setConfirmedSearch('');
+    Keyboard.dismiss(); // Opcional: fecha o teclado
+  };
 
   return (
     <View style={styles.container}>
@@ -48,18 +71,38 @@ export default function TopMenu({ renderTabBar }: { renderTabBar?: () => React.R
             placeholder="Pesquisar região"
             style={styles.searchInput}
             placeholderTextColor="#000"
+            value={searchText}
+            onChangeText={setSearchText}
+            onSubmitEditing={handleSearch}
+            returnKeyType="search"
           />
         </View>
-        <View style={styles.locationContainer}>
-          <FontAwesome6 name="location-crosshairs" size={18} color="black" style={styles.locationIcon}/>
-          <Text style={styles.locationText}>{locationName}</Text>
-        </View>
+
+        {/* ⬇️ Faz localização ser clicável */}
+        <TouchableOpacity onPress={goToUserLocation} style={styles.locationContainer}>
+          <FontAwesome6
+            name="location-crosshairs"
+            size={18}
+            color={confirmedSearch ? 'gray' : 'black'}
+            style={styles.locationIcon}
+          />
+          <Text
+            style={[
+              styles.locationText,
+              { color: confirmedSearch ? 'gray' : 'black' },
+            ]}
+          >
+            {locationName}
+          </Text>
+        </TouchableOpacity>
       </View>
 
       {renderTabBar && renderTabBar()}
     </View>
   );
 }
+
+
 
 const styles = StyleSheet.create({
   container: {
@@ -106,3 +149,7 @@ const styles = StyleSheet.create({
     marginBottom: 3
   },
 });
+function onSearch(arg0: string) {
+  throw new Error('Function not implemented.');
+}
+

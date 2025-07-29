@@ -4,6 +4,7 @@ import * as SplashScreen from 'expo-splash-screen';
 import { useEffect } from 'react';
 import BottomMenu from '../../components/BottomMenu';
 import { View, StyleSheet } from 'react-native';
+import { SearchLocationProvider } from '../context/SearchLocationContext';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -35,12 +36,15 @@ export default function RootLayout() {
   const shouldShowMenu = !hideMenuRoutes.includes(pathname);
 
   return (
-    <View style={styles.container}>
+    <SearchLocationProvider>
+      <View style={styles.container}>
       <View style={styles.content}>
         <Slot />
       </View>
       {shouldShowMenu && <BottomMenu />}
     </View>
+    </SearchLocationProvider>
+    
   );
 }
 
