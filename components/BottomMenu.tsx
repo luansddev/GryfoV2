@@ -2,6 +2,7 @@ import React from 'react';
 import { View, TouchableOpacity, StyleSheet } from 'react-native';
 import { usePathname, useRouter } from 'expo-router';
 import { MaterialIcons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const tabs = [
   { name: 'home', icon: 'home' },
@@ -10,12 +11,19 @@ const tabs = [
   { name: 'configuracoes', icon: 'settings' },
 ];
 
+function Spacer(){
+  const insets = useSafeAreaInsets(); // usei pra espaçamento (mesmo pkg do safeAreaView)
+  
+  return <View style={{ paddingBottom: insets.bottom, backgroundColor: "#000000ff" }}></View>
+}
+
 export default function BottomMenu() {
   const pathname = usePathname();
   const router = useRouter();
 
   return (
-    <View style={styles.container}>
+    <View>
+      <View style={styles.container}>
       {tabs.map((tab) => {
         const isActive = pathname === `/${tab.name}`;
         return (
@@ -34,6 +42,8 @@ export default function BottomMenu() {
           </TouchableOpacity>
         );
       })}
+      </View>
+      <Spacer />
     </View>
   );
 }
@@ -42,9 +52,9 @@ const styles = StyleSheet.create({
   container: {
     flexDirection: 'row',
     justifyContent: 'space-evenly',
-    backgroundColor: '#000',
-    paddingVertical: 10,
+    backgroundColor: '#000000ff',
     paddingBottom: 20,
+    paddingVertical: 10,
     height: 80,
     alignItems: "center",
   },
