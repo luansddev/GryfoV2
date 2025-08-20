@@ -1,19 +1,20 @@
 import React from 'react';
 import { View, TouchableOpacity, StyleSheet } from 'react-native';
 import { usePathname, useRouter } from 'expo-router';
-import { MaterialIcons } from '@expo/vector-icons';
+// ALTERAÇÃO 1: Mudar a importação da biblioteca de ícones
+import { MaterialCommunityIcons } from '@expo/vector-icons'; 
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+// ALTERAÇÃO 2: Atualizar os nomes dos ícones para o padrão da nova biblioteca
 const tabs = [
-  { name: 'home', icon: 'home' },
-  { name: 'notificacoes', icon: 'notifications' },
-  { name: 'conta', icon: 'person' },
-  { name: 'configuracoes', icon: 'settings' },
+  { name: 'home', iconFilled: 'home', iconOutlined: 'home-outline' },
+  { name: 'notificacoes', iconFilled: 'bell', iconOutlined: 'bell-outline' },
+  { name: 'conta', iconFilled: 'account', iconOutlined: 'account-outline' },
+  { name: 'configuracoes', iconFilled: 'cog', iconOutlined: 'cog-outline' },
 ];
 
-function Spacer(){
-  const insets = useSafeAreaInsets(); // usei pra espaçamento (mesmo pkg do safeAreaView)
-  
+function Spacer() {
+  const insets = useSafeAreaInsets();
   return <View style={{ paddingBottom: insets.bottom, backgroundColor: "#000000ff" }}></View>
 }
 
@@ -24,24 +25,25 @@ export default function BottomMenu() {
   return (
     <View>
       <View style={styles.container}>
-      {tabs.map((tab) => {
-        const isActive = pathname === `/${tab.name}`;
-        return (
-          <TouchableOpacity
-            key={tab.name}
-            onPress={() => {
-              if (!isActive) router.push(`/${tab.name}`);
-            }}
-            style={styles.iconWrapper}
-          >
-            <MaterialIcons
-              name={tab.icon as any}
-              size={34}
-              color={isActive ? '#fff' : '#808080'}
-            />
-          </TouchableOpacity>
-        );
-      })}
+        {tabs.map((tab) => {
+          const isActive = pathname === `/${tab.name}`;
+          return (
+            <TouchableOpacity
+              key={tab.name}
+              onPress={() => {
+                if (!isActive) router.push(`/${tab.name}`);
+              }}
+              style={styles.iconWrapper}
+            >
+              {/* ALTERAÇÃO 3: Usar o novo componente de ícone */}
+              <MaterialCommunityIcons
+                name={isActive ? tab.iconFilled : tab.iconOutlined as any}
+                size={32}
+                color={isActive ? '#fff' : '#bbbbbbff'}
+              />
+            </TouchableOpacity>
+          );
+        })}
       </View>
       <Spacer />
     </View>
