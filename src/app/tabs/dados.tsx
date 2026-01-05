@@ -4,7 +4,7 @@ import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
 import { normalizarCidade } from '../../context/Normalizer';
 import * as Location from 'expo-location';
 import { useSearchLocation } from '../../context/SearchLocationContext';
-import { PieChart, BarChart, ProgressChart, } from 'react-native-chart-kit';
+import { PieChart, BarChart } from 'react-native-chart-kit';
 import { LinearGradient } from 'expo-linear-gradient';
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
@@ -88,7 +88,6 @@ export default function Dados() {
       .sort((a, b) => b.quantidade - a.quantidade)
       .slice(0, 3);
 
-    // captura crimes contra a vida
     crimesContraVida.doloso = dadosCidade["HOMICÍDIO DOLOSO"]?.quantidade || 0;
     crimesContraVida.culposo = dadosCidade["HOMICÍDIO CULPOSO OUTROS"]?.quantidade || 0;
     crimesContraVida.tentativa = dadosCidade["TENTATIVA DE HOMICÍDIO"]?.quantidade || 0;
@@ -127,12 +126,65 @@ export default function Dados() {
           {searchedLocation && (
             <Marker coordinate={searchedLocation} />
           )}
+
+          {/* ============ MARCADORES DE CRIMES CONTRA A VIDA ============ */}
+{dadosCidade?.["HOMICÍDIO DOLOSO"]?.localizacoes?.map((ocorrencia: any, idx: number) => (
+  <Marker
+    key={`doloso-${idx}`}
+    coordinate={{ latitude: ocorrencia.latitude, longitude: ocorrencia.longitude }}
+    title="Homicídio Doloso"
+  >
+    <Image source={require("../../../assets/icons/crimesContraVida/Homicidio_Doloso.png")} style={styles.markerIcon} />
+  </Marker>
+))}
+
+{dadosCidade?.["HOMICÍDIO CULPOSO OUTROS"]?.localizacoes?.map((ocorrencia: any, idx: number) => (
+  <Marker
+    key={`culposo-${idx}`}
+    coordinate={{ latitude: ocorrencia.latitude, longitude: ocorrencia.longitude }}
+    title="Homicídio Culposo"
+  >
+    <Image source={require("../../../assets/icons/crimesContraVida/Homicidio_Culposo.png")} style={styles.markerIcon} />
+  </Marker>
+))}
+
+{dadosCidade?.["TENTATIVA DE HOMICÍDIO"]?.localizacoes?.map((ocorrencia: any, idx: number) => (
+  <Marker
+    key={`tentativa-${idx}`}
+    coordinate={{ latitude: ocorrencia.latitude, longitude: ocorrencia.longitude }}
+    title="Tentativa de Homicídio"
+  >
+    <Image source={require("../../../assets/icons/crimesContraVida/Tentativa_de_Homicidio.png")} style={styles.markerIcon} />
+  </Marker>
+))}
+
+{dadosCidade?.["LATROCÍNIO"]?.localizacoes?.map((ocorrencia: any, idx: number) => (
+  <Marker
+    key={`latrocinio-${idx}`}
+    coordinate={{ latitude: ocorrencia.latitude, longitude: ocorrencia.longitude }}
+    title="Latrocínio"
+  >
+    <Image source={require("../../../assets/icons/crimesContraVida/Latrocinio.png")} style={styles.markerIcon} />
+  </Marker>
+))}
+
+{/* ============ MARCADORES DE FURTO - OUTROS ============ */}
+{dadosCidade?.["FURTO - OUTROS"]?.localizacoes?.map((ocorrencia: any, idx: number) => (
+  <Marker
+    key={`furto-${idx}`}
+    coordinate={{ latitude: ocorrencia.latitude, longitude: ocorrencia.longitude }}
+    title="Furto"
+  >
+    <Image source={require("../../../assets/icons/crimesContraVida/Homicidio_Culposo.png")} style={styles.markerIcon} />
+  </Marker>
+))}
+
         </MapView>
 
         {/* Botão fixo sobre o mapa */}
         <TouchableOpacity style={styles.toggleButton} onPress={toggleMapSize}>
           <Text style={styles.toggleText}>
-            {mapExpanded ? 'Ver dados' : 'Expandir mapa'}
+            {mapExpanded ? 'Ver dados da localização' : 'Mapa em tela cheia'}
           </Text>
           <Image
             source={
@@ -159,8 +211,8 @@ export default function Dados() {
               <Text style={styles.title}>Visão geral</Text>
 
               <View style={styles.totalBox}>
-                <Text style={{ fontFamily: "Avant", fontSize: 16, color: "#fff" }}>
-                  Total de crimes registrados: <Text style={{ color: "#FF4500" }}>{totalCrimes}</Text>
+                <Text style={{ fontFamily: "texgyB", fontSize: 16, color: "#fff" }}>
+                  Total de crimes registrados: <Text style={{ color: "#fd5f26ff" }}>{totalCrimes}</Text>
                 </Text>
               </View>
 
@@ -188,11 +240,11 @@ export default function Dados() {
                     population: crime.quantidade,
                     color: ['#999999', '#666666', '#333333'][index],
                     legendFontColor: '#fff',
-                    legendFontSize: 12,
+                    legendFontSize: 8.5,
                   })))
                 ]}
-                width={Dimensions.get('window').width - 80}
-                height={170}
+                width={Dimensions.get('window').width - 100}
+                height={160}
                 chartConfig={{
                   backgroundGradientFrom: '#001e4d',
                   backgroundGradientTo: '#001e4d',
@@ -290,10 +342,11 @@ const styles = StyleSheet.create({
     marginEnd: 15,
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#0401c2ff',
+    backgroundColor: '#03009dff',
     paddingHorizontal: 12,
     paddingVertical: 8,
-    borderRadius: 10,
+    borderRadius: 15,
+    borderBottomRightRadius: 0,
     elevation: 4,
     shadowColor: '#000',
     shadowOpacity: 0.2,
@@ -320,10 +373,16 @@ const styles = StyleSheet.create({
   topCrime: { color: 'white', fontFamily: "texgyB", fontSize: 16 },
   totalBox: {
     borderRadius: 8,
-    borderWidth: 2,
+    borderWidth: 1,
     borderColor: "#fff",
     padding: 10,
     alignSelf: 'flex-start',
     marginBottom: 16,
+  },
+
+  markerIcon: {
+    width: 64,
+    height: 64,
+    resizeMode: 'contain',
   },
 });
