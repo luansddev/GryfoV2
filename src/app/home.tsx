@@ -1,7 +1,7 @@
 import { useState } from 'react';
-import { Dimensions, StyleSheet, Text } from 'react-native';
+import { Dimensions, StyleSheet, Text, View } from 'react-native';
 import { TabView, SceneMap, TabBar } from 'react-native-tab-view';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import TopMenu from '../../components/TopMenu';
 import Dados from './tabs/dados';
 import Relatos from './tabs/relatos';
@@ -9,6 +9,11 @@ import Locais from './tabs/locais';
 import { useFonts } from 'expo-font';
 
 const initialLayout = { width: Dimensions.get('window').width };
+
+function Spacer() {
+  const insets = useSafeAreaInsets();
+  return <View style={{ paddingTop: insets.top, backgroundColor: "#F5F5F5" }}></View>
+}
 
 export default function Home() {
   const [fontsLoaded] = useFonts({
@@ -57,7 +62,8 @@ export default function Home() {
   if (!fontsLoaded) return null;
 
   return (
-    <SafeAreaView style={styles.container}>
+    <View style={styles.container}>
+      <Spacer />
       <TopMenu renderTabBar={() => null} />
       <TabView
         navigationState={{ index, routes }}
@@ -66,7 +72,7 @@ export default function Home() {
         initialLayout={initialLayout}
         renderTabBar={renderTabBar}
       />
-    </SafeAreaView>
+    </View>
   );
 }
 
