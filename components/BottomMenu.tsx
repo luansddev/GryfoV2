@@ -1,16 +1,14 @@
 import React from 'react';
 import { View, TouchableOpacity, StyleSheet } from 'react-native';
 import { usePathname, useRouter } from 'expo-router';
-// ALTERAÇÃO 1: Mudar a importação da biblioteca de ícones
-import { MaterialCommunityIcons } from '@expo/vector-icons'; 
+import { Feather } from '@expo/vector-icons'; 
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-// ALTERAÇÃO 2: Atualizar os nomes dos ícones para o padrão da nova biblioteca
 const tabs = [
-  { name: 'home', iconFilled: 'home', iconOutlined: 'home-outline' },
-  { name: 'notificacoes', iconFilled: 'bell', iconOutlined: 'bell-outline' },
-  { name: 'conta', iconFilled: 'account', iconOutlined: 'account-outline' },
-  { name: 'configuracoes', iconFilled: 'cog', iconOutlined: 'cog-outline' },
+  { name: 'home', icon: 'home' },
+  { name: 'notificacoes', icon: 'bell' },
+  { name: 'conta', icon: 'user' },
+  { name: 'configuracoes', icon: 'settings' },
 ];
 
 function Spacer() {
@@ -21,9 +19,10 @@ function Spacer() {
 export default function BottomMenu() {
   const pathname = usePathname();
   const router = useRouter();
+  const insets = useSafeAreaInsets();
 
   return (
-    <View>
+    <View style={[styles.floatingWrapper, { bottom: Math.max(insets.bottom + 20, 30) }]}>
       <View style={styles.container}>
         {tabs.map((tab) => {
           const isActive = pathname === `/${tab.name}`;
@@ -33,34 +32,55 @@ export default function BottomMenu() {
               onPress={() => {
                 if (!isActive) router.push(`/${tab.name}`);
               }}
-              style={styles.iconWrapper}
+              style={[styles.iconWrapper, isActive && styles.iconWrapperActive]}
             >
-              {/* ALTERAÇÃO 3: Usar o novo componente de ícone */}
-              <MaterialCommunityIcons
-                name={isActive ? tab.iconFilled : tab.iconOutlined as any}
-                size={32}
-                color={isActive ? '#fff' : '#bbbbbbff'}
+              <Feather
+                name={tab.icon as any}
+                size={22}
+                color={isActive ? '#fff' : '#000'}
               />
             </TouchableOpacity>
           );
         })}
       </View>
-      <Spacer />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
+  floatingWrapper: {
+    position: 'absolute',
+    alignSelf: 'center',
+    zIndex: 100,
+  },
   container: {
     flexDirection: 'row',
-    justifyContent: 'space-evenly',
-    backgroundColor: '#000000ff',
-    paddingBottom: 20,
+    justifyContent: 'center',
+    backgroundColor: '#fff',
     paddingVertical: 10,
-    height: 80,
+    paddingHorizontal: 10,
+    gap: 16,
+    borderRadius: 26,
     alignItems: "center",
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 10,
+    elevation: 8,
   },
   iconWrapper: {
     alignItems: 'center',
+    justifyContent: 'center',
+    width: 48,
+    height: 48,
+    borderRadius: 16,
+  },
+  iconWrapperActive: {
+    backgroundColor: '#000',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
   },
 });
