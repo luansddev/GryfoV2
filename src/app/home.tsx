@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Dimensions, StyleSheet, Text, View, TouchableOpacity, LayoutAnimation, Platform, UIManager } from 'react-native';
+import { useState, useEffect } from 'react';
+import { Dimensions, StyleSheet, Text, View, TouchableOpacity, LayoutAnimation, Platform, UIManager, Image } from 'react-native';
 import { TabView, SceneMap } from 'react-native-tab-view';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import TopMenu from '../../components/TopMenu';
@@ -9,6 +9,8 @@ import Locais from './tabs/locais';
 import { useFonts } from 'expo-font';
 import FontAwesome6 from '@expo/vector-icons/FontAwesome6';
 import Animated, { LinearTransition, FadeIn, FadeOut } from 'react-native-reanimated';
+import { useVigiaCreation } from '../context/VigiaCreationContext';
+import { useLocalSearchParams } from 'expo-router';
 
 const AnimatedTouchableOpacity = Animated.createAnimatedComponent(TouchableOpacity);
 
@@ -25,11 +27,21 @@ export default function Home() {
   });
 
   const [index, setIndex] = useState(0);
+  const params = useLocalSearchParams();
+
+  useEffect(() => {
+    if (params.switchTab === 'relatos') {
+      setIndex(1);
+    }
+  }, [params.switchTab]);
+
   const [routes] = useState([
-    { key: 'dados', title: 'Mapa', icon: 'map' },
+    { key: 'dados', title: 'Dados', icon: 'chart-line' },
     { key: 'relatos', title: 'Relatos', icon: 'comment-dots' },
-    { key: 'locais', title: 'Salvos', icon: 'bookmark' },
+    { key: 'locais', title: 'Vigias', icon: 'eye' },
   ]);
+
+  const { isCreatingVigia } = useVigiaCreation();
 
   const renderScene = SceneMap({
     dados: Dados,
@@ -54,37 +66,40 @@ export default function Home() {
         onIndexChange={handleTabPress}
         initialLayout={initialLayout}
         renderTabBar={renderTabBar}
+        swipeEnabled={!isCreatingVigia}
       />
-      <View style={styles.overlayContainer} pointerEvents="box-none">
-        <View style={styles.topSection}>
-          <Spacer />
-          <TopMenu />
+      {!isCreatingVigia && (
+        <View style={styles.overlayContainer} pointerEvents="box-none">
+          <View style={styles.topSection}>
+            <Spacer />
+            <TopMenu />
+          </View>
+          <View style={styles.capsulesContainer} pointerEvents="box-none">
+            {routes.map((route, i) => {
+               const isActive = index === i;
+               return (
+                   <AnimatedTouchableOpacity
+                   key={route.key}
+                   style={[styles.capsule, isActive && styles.capsuleActive]}
+                   onPress={() => handleTabPress(i)}
+                   activeOpacity={0.8}
+                   layout={LinearTransition.duration(250)}
+                 >
+                   {isActive ? (
+                     <Animated.Text entering={FadeIn.duration(200)} exiting={FadeOut.duration(200)} style={[styles.capsuleText, styles.capsuleTextActive]}>
+                       {route.title}
+                     </Animated.Text>
+                   ) : (
+                     <Animated.View entering={FadeIn.duration(200)} exiting={FadeOut.duration(200)}>
+                       <FontAwesome6 name={route.icon} size={16} color="#666" />
+                     </Animated.View>
+                   )}
+                 </AnimatedTouchableOpacity>
+               );
+            })}
+          </View>
         </View>
-        <View style={styles.capsulesContainer} pointerEvents="box-none">
-          {routes.map((route, i) => {
-             const isActive = index === i;
-             return (
-                 <AnimatedTouchableOpacity
-                 key={route.key}
-                 style={[styles.capsule, isActive && styles.capsuleActive]}
-                 onPress={() => handleTabPress(i)}
-                 activeOpacity={0.8}
-                 layout={LinearTransition.duration(250)}
-               >
-                 {isActive ? (
-                   <Animated.Text entering={FadeIn.duration(200)} exiting={FadeOut.duration(200)} style={[styles.capsuleText, styles.capsuleTextActive]}>
-                     {route.title}
-                   </Animated.Text>
-                 ) : (
-                   <Animated.View entering={FadeIn.duration(200)} exiting={FadeOut.duration(200)}>
-                     <FontAwesome6 name={route.icon} size={16} color="#666" />
-                   </Animated.View>
-                 )}
-               </AnimatedTouchableOpacity>
-             );
-          })}
-        </View>
-      </View>
+      )}
     </View>
   );
 }

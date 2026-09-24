@@ -25,12 +25,12 @@ export default function BottomMenu() {
     <View style={[styles.floatingWrapper, { bottom: Math.max(insets.bottom + 20, 30) }]}>
       <View style={styles.container}>
         {tabs.map((tab) => {
-          const isActive = pathname === `/${tab.name}`;
+          const isActive = pathname === `/${tab.name}` || (tab.name === 'home' && pathname === '/biblioteca');
           return (
             <TouchableOpacity
               key={tab.name}
               onPress={() => {
-                if (!isActive) router.push(`/${tab.name}`);
+                if (!isActive) router.push(`/${tab.name}` as any);
               }}
               style={[styles.iconWrapper, isActive && styles.iconWrapperActive]}
             >

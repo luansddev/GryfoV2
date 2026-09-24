@@ -23,75 +23,17 @@ import { normalizarCidade } from '../../context/Normalizer';
 import { LinearGradient } from 'expo-linear-gradient';
 import Svg, { Path } from 'react-native-svg';
 
+import {
+  lifeCrimesKeys,
+  physicalCrimesKeys,
+  patrimonyCrimesKeys,
+  formatCrimeName,
+  getCrimeIcon,
+  mapNatureOptions,
+} from '../../constants/CrimeData';
+
 /* ================= CHAVES E FORMATADORES ================= */
 
-const lifeCrimesKeys = [
-  'HOMICÍDIO DOLOSO',
-  'HOMICÍDIO CULPOSO OUTROS',
-  'TENTATIVA DE HOMICÍDIO',
-  'LATROCÍNIO',
-  'HOMICÍDIO CULPOSO POR ACIDENTE DE TRÂNSITO',
-  'LESÃO CORPORAL SEGUIDA DE MORTE',
-];
-
-const physicalCrimesKeys = [
-  'ESTUPRO',
-  'ESTUPRO DE VULNERÁVEL',
-  'LESÃO CORPORAL DOLOSA',
-  'LESÃO CORPORAL CULPOSA - OUTRAS',
-  'LESÃO CORPORAL CULPOSA POR ACIDENTE DE TRÂNSITO',
-];
-
-const patrimonyCrimesKeys = [
-  'ROUBO A BANCO',
-  'ROUBO DE CARGA',
-  'ROUBO DE VEÍCULO',
-  'FURTO DE VEÍCULO',
-  'FURTO - OUTROS',
-  'ROUBO - OUTROS',
-];
-
-const formatCrimeName = (name: string) => {
-  const lower = name.toLowerCase();
-  if (lower.includes('roubo a banco')) return 'Roubo a Banco';
-  if (lower.includes('furto de veículo')) return 'Furto de Veículo';
-  if (lower.includes('roubo de veículo')) return 'Roubo de Veículo';
-  if (lower.includes('furto de carga')) return 'Furto de Carga';
-  if (lower.includes('roubo de carga')) return 'Roubo de Carga';
-  if (lower.includes('homicídio doloso')) return 'Homicídio Doloso';
-  if (lower.includes('homicídio culposo outros')) return 'Homicídio Culp. (Outros)';
-  if (lower.includes('homicídio culposo por acidente')) return 'Homicídio Culp. (Trânsito)';
-  if (lower.includes('homicídio culposo')) return 'Homicídio Culposo';
-  if (lower.includes('tentativa de homicídio')) return 'Tentativa de Homicídio';
-  if (lower.includes('latrocínio')) return 'Latrocínio';
-  if (lower.includes('estupro de vulnerável')) return 'Estupro de Vulnerável';
-  if (lower.includes('estupro')) return 'Estupro';
-  if (lower.includes('lesão corporal seguida')) return 'Lesão Corp. Seg. Morte';
-  if (lower.includes('lesão corporal dolosa')) return 'Lesão Corporal Dolosa';
-  if (lower.includes('lesão corporal culposa - outras') || lower.includes('lesão corporal culposa outras')) return 'Lesão Corp. Culp. (Outras)';
-  if (lower.includes('lesão corporal culposa por acidente')) return 'Lesão Corp. Culp. (Trânsito)';
-  if (lower.includes('lesão corporal culposa')) return 'Lesão Corporal Culposa';
-  if (lower.includes('lesão corporal')) return 'Lesão Corporal';
-  if (lower.includes('furto')) return 'Furtos';
-  if (lower.includes('roubo')) return 'Roubos';
-
-  return name.charAt(0).toUpperCase() + name.slice(1).toLowerCase();
-};
-
-const getCrimeIcon = (name: string): { icon: string; color: string } => {
-  const lower = name.toLowerCase();
-  if (lower.includes('banco')) return { icon: 'building-columns', color: '#fbbf24' };
-  if (lower.includes('carga')) return { icon: 'truck-ramp-box', color: '#f97316' };
-  if (lower.includes('veículo') || lower.includes('veiculo')) return { icon: 'car-side', color: '#38bdf8' };
-  if (lower.includes('trânsito') || lower.includes('transito')) return { icon: 'car-burst', color: '#fb923c' };
-  if (lower.includes('latrocínio') || lower.includes('latrocinio')) return { icon: 'sack-xmark', color: '#f87171' };
-  if (lower.includes('homicídio') || lower.includes('homicidio')) return { icon: 'skull-crossbones', color: '#f87171' };
-  if (lower.includes('estupro')) return { icon: 'shield-heart', color: '#f472b6' };
-  if (lower.includes('lesão') || lower.includes('lesao')) return { icon: 'user-injured', color: '#fdba74' };
-  if (lower.includes('furto')) return { icon: 'bag-shopping', color: '#c084fc' };
-  if (lower.includes('roubo')) return { icon: 'mask', color: '#facc15' };
-  return { icon: 'circle-exclamation', color: '#94a3b8' };
-};
 
 const arcPath = (startAngle: number, endAngle: number, radius: number, innerRadius: number, centerX: number, centerY: number) => {
   const angle = endAngle - startAngle;
@@ -179,26 +121,6 @@ const categoryOptions = [
   },
 ];
 
-const mapNatureOptions = [
-  {
-    id: 'life' as const,
-    label: 'Crimes contra a Vida',
-    color: '#000000',
-    icon: 'skull-crossbones',
-  },
-  {
-    id: 'physical' as const,
-    label: 'Integridade Física',
-    color: '#FF0000',
-    icon: 'person-falling-burst',
-  },
-  {
-    id: 'patrimony' as const,
-    label: 'Patrimônio',
-    color: '#666666',
-    icon: 'building-shield',
-  },
-];
 
 /* ================= COMPONENTE PRINCIPAL ================= */
 
@@ -275,6 +197,13 @@ export default function Dados() {
         const loc = await Location.getCurrentPositionAsync({});
         if (!isMounted) return;
         setUserLocation(loc);
+
+        setRegion({
+          latitude: loc.coords.latitude,
+          longitude: loc.coords.longitude,
+          latitudeDelta: 0.08,
+          longitudeDelta: 0.08,
+        });
 
         // Anima o mapa para a localização do usuário imediatamente
         mapRef.current?.animateToRegion({
@@ -407,46 +336,52 @@ export default function Dados() {
 
   useEffect(() => {
     if (dadosCidade) {
-      const lifePoints: any[] = [];
-      const physicalPoints: any[] = [];
-      const patrimonyPoints: any[] = [];
-
-      lifeCrimesKeys.forEach(key => {
-        if (mapFilter === 'life' && selectedSubFilters.length > 0 && !selectedSubFilters.includes(key)) return;
-        dadosCidade[key]?.localizacoes?.forEach((loc: any) => {
-          lifePoints.push({
-            type: 'Feature',
-            properties: { crime: key, title: formatCrimeName(key), cluster: false },
-            geometry: { type: 'Point', coordinates: [loc.longitude, loc.latitude] }
+      if (mapFilter === 'life') {
+        const lifePoints: any[] = [];
+        lifeCrimesKeys.forEach(key => {
+          if (selectedSubFilters.length > 0 && !selectedSubFilters.includes(key)) return;
+          dadosCidade[key]?.localizacoes?.forEach((loc: any, idx: number) => {
+            lifePoints.push({
+              type: 'Feature',
+              properties: { id: `life-${key}-${idx}`, crime: key, title: formatCrimeName(key), cluster: false },
+              geometry: { type: 'Point', coordinates: [loc.longitude, loc.latitude] }
+            });
           });
         });
-      });
-
-      physicalCrimesKeys.forEach(key => {
-        if (mapFilter === 'physical' && selectedSubFilters.length > 0 && !selectedSubFilters.includes(key)) return;
-        dadosCidade[key]?.localizacoes?.forEach((loc: any) => {
-          physicalPoints.push({
-            type: 'Feature',
-            properties: { crime: key, title: formatCrimeName(key), cluster: false },
-            geometry: { type: 'Point', coordinates: [loc.longitude, loc.latitude] }
+        lifeSupercluster.load(lifePoints);
+        physicalSupercluster.load([]);
+        patrimonySupercluster.load([]);
+      } else if (mapFilter === 'physical') {
+        const physicalPoints: any[] = [];
+        physicalCrimesKeys.forEach(key => {
+          if (selectedSubFilters.length > 0 && !selectedSubFilters.includes(key)) return;
+          dadosCidade[key]?.localizacoes?.forEach((loc: any, idx: number) => {
+            physicalPoints.push({
+              type: 'Feature',
+              properties: { id: `phys-${key}-${idx}`, crime: key, title: formatCrimeName(key), cluster: false },
+              geometry: { type: 'Point', coordinates: [loc.longitude, loc.latitude] }
+            });
           });
         });
-      });
-
-      patrimonyCrimesKeys.forEach(key => {
-        if (mapFilter === 'patrimony' && selectedSubFilters.length > 0 && !selectedSubFilters.includes(key)) return;
-        dadosCidade[key]?.localizacoes?.forEach((loc: any) => {
-          patrimonyPoints.push({
-            type: 'Feature',
-            properties: { crime: key, title: formatCrimeName(key), cluster: false },
-            geometry: { type: 'Point', coordinates: [loc.longitude, loc.latitude] }
+        physicalSupercluster.load(physicalPoints);
+        lifeSupercluster.load([]);
+        patrimonySupercluster.load([]);
+      } else if (mapFilter === 'patrimony') {
+        const patrimonyPoints: any[] = [];
+        patrimonyCrimesKeys.forEach(key => {
+          if (selectedSubFilters.length > 0 && !selectedSubFilters.includes(key)) return;
+          dadosCidade[key]?.localizacoes?.forEach((loc: any, idx: number) => {
+            patrimonyPoints.push({
+              type: 'Feature',
+              properties: { id: `patr-${key}-${idx}`, crime: key, title: formatCrimeName(key), cluster: false },
+              geometry: { type: 'Point', coordinates: [loc.longitude, loc.latitude] }
+            });
           });
         });
-      });
-
-      lifeSupercluster.load(lifePoints);
-      physicalSupercluster.load(physicalPoints);
-      patrimonySupercluster.load(patrimonyPoints);
+        patrimonySupercluster.load(patrimonyPoints);
+        lifeSupercluster.load([]);
+        physicalSupercluster.load([]);
+      }
 
       updateClusters(region, dadosCidade);
     }
@@ -800,7 +735,7 @@ export default function Dados() {
             }
             return (
               <Marker
-                key={`${mapFilter}-${c.properties.crime}-${latitude}-${longitude}`}
+                key={c.properties.id || `${mapFilter}-${c.properties.crime}-${latitude}-${longitude}`}
                 coordinate={{ latitude, longitude }}
                 title={c.properties.title}
                 anchor={{ x: 0.5, y: 0.5 }}

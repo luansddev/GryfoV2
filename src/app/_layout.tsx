@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react';
 import BottomMenu from '../../components/BottomMenu';
 import { View, StyleSheet } from 'react-native';
 import { SearchLocationProvider } from '../context/SearchLocationContext';
+import { VigiaCreationProvider, useVigiaCreation } from '../context/VigiaCreationContext';
 import { onAuthStateChanged } from 'firebase/auth';
 import { auth } from '../config/firebaseConfig';
 
@@ -63,10 +64,11 @@ export default function RootLayout() {
   const shouldShowMenu = !hideMenuRoutes.includes(pathname);
 
   return (
+    <VigiaCreationProvider>
     <SearchLocationProvider>
       <View style={styles.container}>
       <View style={styles.content}>
-        <Tabs tabBar={() => shouldShowMenu ? <BottomMenu /> : null} screenOptions={{ headerShown: false }}>
+        <Tabs tabBar={() => shouldShowMenu ? <BottomMenuWrapper /> : null} screenOptions={{ headerShown: false }}>
           <Tabs.Screen name="index" />
           <Tabs.Screen name="login" />
           <Tabs.Screen name="cadastro" />
@@ -74,12 +76,21 @@ export default function RootLayout() {
           <Tabs.Screen name="notificacoes" />
           <Tabs.Screen name="conta" />
           <Tabs.Screen name="configuracoes" />
+          <Tabs.Screen name="biblioteca" />
         </Tabs>
       </View>
     </View>
     </SearchLocationProvider>
+    </VigiaCreationProvider>
     
   );
+}
+
+// Wrapper que esconde o BottomMenu durante criação de vigia
+function BottomMenuWrapper() {
+  const { isCreatingVigia } = useVigiaCreation();
+  if (isCreatingVigia) return null;
+  return <BottomMenu />;
 }
 
 const styles = StyleSheet.create({
