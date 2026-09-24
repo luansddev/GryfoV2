@@ -11,7 +11,8 @@ import {
   Modal,
 } from 'react-native';
 
-import MapView, { Marker, PROVIDER_GOOGLE, Region } from 'react-native-maps';
+import { Marker, Region } from 'react-native-maps';
+import { useSharedMap } from '../../context/SharedMapContext';
 import Supercluster from 'supercluster';
 import { FontAwesome6 } from '@expo/vector-icons';
 import Animated, { useSharedValue, useAnimatedStyle, withTiming } from 'react-native-reanimated';
@@ -163,7 +164,7 @@ export default function Dados() {
   });
 
   const { location: searchedLocation, searchMode, searchedCity, userCity } = useSearchLocation();
-  const mapRef = useRef<MapView | null>(null);
+  const { mapRef, region: sharedRegion, registerMapChildren } = useSharedMap();
 
   const [region, setRegion] = useState<Region>({
     latitude: -23.5505,
@@ -383,9 +384,68 @@ export default function Dados() {
         physicalSupercluster.load([]);
       }
 
-      updateClusters(region, dadosCidade);
+      updateClusters(sharedRegion, dadosCidade);
     }
-  }, [dadosCidade, selectedSubFilters, mapFilter]);
+  }, [dadosCidade, selectedSubFilters, mapFilter, sharedRegion]);
+
+  useEffect(() => {
+    const markersToRender = (mapFilter === 'life' ? lifeClusters : mapFilter === 'physical' ? physicalClusters : patrimonyClusters).map(c => {
+      const [longitude, latitude] = c.geometry.coordinates;
+      const isCluster = c.properties?.cluster;
+      const isLife = mapFilter === 'life';
+      const isPhysical = mapFilter === 'physical';
+      const bgColor = isLife ? '#000' : isPhysical ? '#FF0000' : '#666666';
+      const dotStyle = isLife ? styles.markerDiamond : isPhysical ? styles.markerRedDiamond : styles.markerGrayDiamond;
+      const supercluster = isLife ? lifeSupercluster : isPhysical ? physicalSupercluster : patrimonySupercluster;
+
+      if (isCluster) {
+        return (
+          <Marker
+            key={`${mapFilter}-cluster-${c.id}`}
+            coordinate={{ latitude, longitude }}
+            onPress={() => {
+              const expansionZoom = supercluster.getClusterExpansionZoom(c.id as number);
+              const zoomDelta = 360 / Math.pow(2, expansionZoom);
+              mapRef.current?.animateToRegion({
+                latitude, longitude,
+                latitudeDelta: zoomDelta, longitudeDelta: zoomDelta
+              });
+            }}
+            style={{ zIndex: c.properties.point_count + 1 }}
+          >
+            <View style={styles.clusterContainer}>
+              <View style={[styles.clusterHalo, { backgroundColor: bgColor }]} />
+              <View style={[styles.clusterCircle, { backgroundColor: bgColor }]}>
+                <Text style={styles.clusterText}>{c.properties.point_count}</Text>
+              </View>
+            </View>
+          </Marker>
+        );
+      }
+      return (
+        <Marker
+          key={c.properties.id || `${mapFilter}-${c.properties.crime}-${latitude}-${longitude}`}
+          coordinate={{ latitude, longitude }}
+          title={c.properties.title}
+          anchor={{ x: 0.5, y: 0.5 }}
+          tracksViewChanges={false}
+        >
+          <View style={styles.diamondWrapper}>
+            <Svg width={26} height={26} viewBox="0 0 26 26">
+              <Path 
+                d="M13 3 L23 13 L13 23 L3 13 Z" 
+                fill={bgColor} 
+                stroke="#fff" 
+                strokeWidth={2} 
+                strokeLinejoin="round"
+              />
+            </Svg>
+          </View>
+        </Marker>
+      );
+    });
+    registerMapChildren('dados', <>{markersToRender}</>);
+  }, [lifeClusters, physicalClusters, patrimonyClusters, mapFilter, registerMapChildren, mapRef]);
 
   useEffect(() => {
     setSelectedSubFilters([]);
@@ -687,76 +747,7 @@ export default function Dados() {
 
   return (
     <View style={styles.container}>
-      <View style={{ flex: 1 }}>
-        <MapView
-          ref={mapRef}
-          provider={PROVIDER_GOOGLE}
-          style={{ flex: 1, width: Dimensions.get('window').width }}
-          initialRegion={region}
-          showsUserLocation={true}
-          minZoomLevel={5}
-          onRegionChangeComplete={(reg) => {
-            setRegion(reg);
-            updateClusters(reg);
-          }}
-        >
-          {(mapFilter === 'life' ? lifeClusters : mapFilter === 'physical' ? physicalClusters : patrimonyClusters).map(c => {
-            const [longitude, latitude] = c.geometry.coordinates;
-            const isCluster = c.properties?.cluster;
-            const isLife = mapFilter === 'life';
-            const isPhysical = mapFilter === 'physical';
-            const bgColor = isLife ? '#000' : isPhysical ? '#FF0000' : '#666666';
-            const dotStyle = isLife ? styles.markerDiamond : isPhysical ? styles.markerRedDiamond : styles.markerGrayDiamond;
-            const supercluster = isLife ? lifeSupercluster : isPhysical ? physicalSupercluster : patrimonySupercluster;
-
-            if (isCluster) {
-              return (
-                <Marker
-                  key={`${mapFilter}-cluster-${c.id}`}
-                  coordinate={{ latitude, longitude }}
-                  onPress={() => {
-                    const expansionZoom = supercluster.getClusterExpansionZoom(c.id as number);
-                    const zoomDelta = 360 / Math.pow(2, expansionZoom);
-                    mapRef.current?.animateToRegion({
-                      latitude, longitude,
-                      latitudeDelta: zoomDelta, longitudeDelta: zoomDelta
-                    });
-                  }}
-                  style={{ zIndex: c.properties.point_count + 1 }}
-                >
-                  <View style={styles.clusterContainer}>
-                    <View style={[styles.clusterHalo, { backgroundColor: bgColor }]} />
-                    <View style={[styles.clusterCircle, { backgroundColor: bgColor }]}>
-                      <Text style={styles.clusterText}>{c.properties.point_count}</Text>
-                    </View>
-                  </View>
-                </Marker>
-              );
-            }
-            return (
-              <Marker
-                key={c.properties.id || `${mapFilter}-${c.properties.crime}-${latitude}-${longitude}`}
-                coordinate={{ latitude, longitude }}
-                title={c.properties.title}
-                anchor={{ x: 0.5, y: 0.5 }}
-                tracksViewChanges={false}
-              >
-                <View style={styles.diamondWrapper}>
-                  <Svg width={26} height={26} viewBox="0 0 26 26">
-                    <Path 
-                      d="M13 3 L23 13 L13 23 L3 13 Z" 
-                      fill={bgColor} 
-                      stroke="#fff" 
-                      strokeWidth={2} 
-                      strokeLinejoin="round"
-                    />
-                  </Svg>
-                </View>
-              </Marker>
-            );
-          })}
-        </MapView>
-
+      <View style={{ flex: 1, zIndex: 0 }}>
         {/* Controles sobre o mapa (Centralizados acima da tabbar ou acima dos cards) */}
         <View style={[styles.mapControlsWrapper, !mapExpanded && { bottom: Dimensions.get('window').height * 0.6 + 10 }]}>
           {mapExpanded && (
@@ -1322,7 +1313,7 @@ export default function Dados() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: 'transparent',
   },
   centered: {
     flex: 1,

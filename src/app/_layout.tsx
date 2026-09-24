@@ -8,6 +8,7 @@ import { SearchLocationProvider } from '../context/SearchLocationContext';
 import { VigiaCreationProvider, useVigiaCreation } from '../context/VigiaCreationContext';
 import { onAuthStateChanged } from 'firebase/auth';
 import { auth } from '../config/firebaseConfig';
+import { SharedMapProvider } from '../context/SharedMapContext';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -66,6 +67,7 @@ export default function RootLayout() {
   return (
     <VigiaCreationProvider>
     <SearchLocationProvider>
+    <SharedMapProvider>
       <View style={styles.container}>
       <View style={styles.content}>
         <Tabs tabBar={() => shouldShowMenu ? <BottomMenuWrapper /> : null} screenOptions={{ headerShown: false }}>
@@ -80,6 +82,7 @@ export default function RootLayout() {
         </Tabs>
       </View>
     </View>
+    </SharedMapProvider>
     </SearchLocationProvider>
     </VigiaCreationProvider>
     

@@ -53,17 +53,32 @@ export const formatCrimeName = (name: string) => {
 
 export const getCrimeIcon = (name: string): { icon: string; color: string } => {
   const lower = name.toLowerCase();
-  if (lower.includes('banco')) return { icon: 'building-columns', color: '#fbbf24' };
-  if (lower.includes('carga')) return { icon: 'truck-ramp-box', color: '#f97316' };
-  if (lower.includes('veículo') || lower.includes('veiculo')) return { icon: 'car-side', color: '#38bdf8' };
-  if (lower.includes('trânsito') || lower.includes('transito')) return { icon: 'car-burst', color: '#fb923c' };
-  if (lower.includes('latrocínio') || lower.includes('latrocinio')) return { icon: 'sack-xmark', color: '#f87171' };
-  if (lower.includes('homicídio') || lower.includes('homicidio')) return { icon: 'skull-crossbones', color: '#f87171' };
-  if (lower.includes('estupro')) return { icon: 'shield-heart', color: '#f472b6' };
-  if (lower.includes('lesão') || lower.includes('lesao')) return { icon: 'user-injured', color: '#fdba74' };
-  if (lower.includes('furto')) return { icon: 'bag-shopping', color: '#c084fc' };
-  if (lower.includes('roubo')) return { icon: 'mask', color: '#facc15' };
-  return { icon: 'circle-exclamation', color: '#94a3b8' };
+  const up = name.toUpperCase();
+
+  // 1. Determinar a cor padronizada pela categoria
+  let color = '#64748b'; // Cinza padrão (Patrimônio)
+  if (lifeCrimesKeys.includes(up) || lower.includes('homicídio') || lower.includes('latrocínio')) {
+    color = '#000000'; // Vida: Preto
+  } else if (physicalCrimesKeys.includes(up) || lower.includes('estupro') || lower.includes('lesão')) {
+    color = '#dc2626'; // Integridade Física: Vermelho
+  } else if (patrimonyCrimesKeys.includes(up) || lower.includes('roubo') || lower.includes('furto')) {
+    color = '#64748b'; // Patrimônio: Cinza
+  }
+
+  // 2. Determinar o ícone específico
+  let icon = 'circle-exclamation';
+  if (lower.includes('banco')) icon = 'building-columns';
+  else if (lower.includes('carga')) icon = 'truck-ramp-box';
+  else if (lower.includes('veículo') || lower.includes('veiculo')) icon = 'car-side';
+  else if (lower.includes('trânsito') || lower.includes('transito')) icon = 'car-burst';
+  else if (lower.includes('latrocínio') || lower.includes('latrocinio')) icon = 'sack-xmark';
+  else if (lower.includes('homicídio') || lower.includes('homicidio')) icon = 'skull-crossbones';
+  else if (lower.includes('estupro')) icon = 'shield-heart';
+  else if (lower.includes('lesão') || lower.includes('lesao')) icon = 'user-injured';
+  else if (lower.includes('furto')) icon = 'bag-shopping';
+  else if (lower.includes('roubo')) icon = 'mask';
+
+  return { icon, color };
 };
 
 export const mapNatureOptions = [

@@ -17,7 +17,7 @@ import {
   Modal,
 } from 'react-native';
 
-import MapView, { Marker, Circle, PROVIDER_GOOGLE, Region, MapPressEvent } from 'react-native-maps';
+import { Marker, Circle, Region, MapPressEvent } from 'react-native-maps';
 import { FontAwesome6 } from '@expo/vector-icons';
 import Animated, { useSharedValue, useAnimatedStyle, withTiming, FadeInUp } from 'react-native-reanimated';
 import * as Location from 'expo-location';
@@ -26,6 +26,7 @@ import Svg, { Path, Circle as SvgCircle } from 'react-native-svg';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useVigiaCreation } from '../../context/VigiaCreationContext';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useSharedMap } from '../../context/SharedMapContext';
 
 /* ================= TYPES ================= */
 
@@ -93,13 +94,7 @@ export default function Locais() {
     }
   }, [tracksViewChanges, vigias]);
 
-  const mapRef = useRef<MapView | null>(null);
-  const [region, setRegion] = useState<Region>({
-    latitude: -23.5505,
-    longitude: -46.6333,
-    latitudeDelta: 0.08,
-    longitudeDelta: 0.08,
-  });
+  const { mapRef, region: sharedRegion, registerMapChildren, setMapPressHandler, setMapInteractionEnabled, userLocation: sharedUserLocation } = useSharedMap();
 
   // Animated panel
   const translateY = useSharedValue(SCREEN_HEIGHT);
@@ -139,7 +134,6 @@ export default function Locais() {
           latitudeDelta: 0.08,
           longitudeDelta: 0.08,
         };
-        setRegion(newRegion);
         mapRef.current?.animateToRegion(newRegion);
       } catch (error) {
         console.warn('Erro ao obter localização:', error);
@@ -153,6 +147,96 @@ export default function Locais() {
 
     return () => { isMounted = false; };
   }, []);
+
+
+  useEffect(() => {
+    const markersToRender = (
+      <>
+        {/* Vigias salvos — Círculos de raio */}
+        {vigias.map(vigia => (
+          <Circle
+            key={`circle-${vigia.id}`}
+            center={{ latitude: vigia.latitude, longitude: vigia.longitude }}
+            radius={vigia.radius}
+            fillColor="rgba(59, 130, 246, 0.12)"
+            strokeColor="rgba(59, 130, 246, 0.45)"
+            strokeWidth={2}
+          />
+        ))}
+
+        {/* Vigias salvos — Marcadores */}
+        {vigias.map(vigia => (
+          <Marker
+            key={`marker-${vigia.id}`}
+            coordinate={{ latitude: vigia.latitude, longitude: vigia.longitude }}
+            title={vigia.name}
+            description={`Raio: ${formatRadius(vigia.radius)}`}
+            anchor={{ x: 0.5, y: 0.5 }}
+            tracksViewChanges={tracksViewChanges}
+          >
+            <View style={styles.vigiaMarkerWrapper} collapsable={false}>
+              <Svg width={36} height={36} viewBox="0 0 36 36">
+                <SvgCircle cx="18" cy="18" r="13" fill="#1d4ed8" stroke="#fff" strokeWidth={2.5} />
+                <Path
+                  transform="translate(2, 2)"
+                  d="M16 11C12.8 11 10.1 13 9 16c1.1 3 3.8 5 7 5s5.9-2 7-5c-1.1-3-3.8-5-7-5zm0 8.5a3.5 3.5 0 110-7 3.5 3.5 0 010 7zm0-5.5a2 2 0 100 4 2 2 0 000-4z"
+                  fill="#fff"
+                />
+              </Svg>
+            </View>
+          </Marker>
+        ))}
+
+        {/* Marcador Temporário de Pesquisa (Target) */}
+        {uiMode === 'creating' && searchedPoint && (
+          <Marker coordinate={searchedPoint} anchor={{ x: 0.5, y: 1 }}>
+            <View style={{ alignItems: 'center' }}>
+              <View style={styles.targetCallout}>
+                <Text style={styles.targetCalloutText}>Toque aqui para confirmar</Text>
+              </View>
+              <Svg width={40} height={40} viewBox="0 0 40 40">
+                <SvgCircle cx="20" cy="20" r="18" fill="rgba(255, 255, 255, 0.3)" stroke="#fff" strokeWidth={2} strokeDasharray="4 4" />
+                <SvgCircle cx="20" cy="20" r="4" fill="#fff" />
+                <Path d="M20 2v6M20 38v-6M2 20h6M38 20h-6" stroke="#fff" strokeWidth={2} strokeLinecap="round" />
+              </Svg>
+            </View>
+          </Marker>
+        )}
+
+        {/* Ponto selecionado durante criação — Círculo preview */}
+        {uiMode === 'creating' && selectedPoint && (
+          <Circle
+            center={selectedPoint}
+            radius={vigiaRadius}
+            fillColor="rgba(59, 130, 246, 0.15)"
+            strokeColor="rgba(59, 130, 246, 0.6)"
+            strokeWidth={2}
+          />
+        )}
+
+        {/* Ponto selecionado durante criação — Marcador */}
+        {uiMode === 'creating' && selectedPoint && (
+          <Marker
+            coordinate={selectedPoint}
+            anchor={{ x: 0.5, y: 0.5 }}
+            tracksViewChanges={true}
+          >
+            <View style={styles.vigiaMarkerWrapper} collapsable={false}>
+              <Svg width={40} height={40} viewBox="0 0 40 40">
+                <SvgCircle cx="20" cy="20" r="15" fill="#2563eb" stroke="#fff" strokeWidth={3} />
+                <Path
+                  transform="translate(2, 2)"
+                  d="M18 12.5C14.5 12.5 11.6 14.7 10.4 18c1.2 3.3 4.1 5.5 7.6 5.5s6.4-2.2 7.6-5.5c-1.2-3.3-4.1-5.5-7.6-5.5zm0 9a3.8 3.8 0 110-7.6 3.8 3.8 0 010 7.6zm0-6a2.2 2.2 0 100 4.4 2.2 2.2 0 000-4.4z"
+                  fill="#fff"
+                />
+              </Svg>
+            </View>
+          </Marker>
+        )}
+      </>
+    );
+    registerMapChildren('locais', markersToRender);
+  }, [vigias, tracksViewChanges, uiMode, searchedPoint, selectedPoint, vigiaRadius, registerMapChildren]);
 
   /* ================= PERSISTÊNCIA ================= */
 
@@ -363,6 +447,14 @@ export default function Locais() {
     }
   };
 
+  useEffect(() => {
+    if (uiMode === 'creating') {
+      setMapPressHandler(handleMapPress);
+    } else {
+      setMapPressHandler(undefined);
+    }
+  }, [uiMode, handleMapPress, setMapPressHandler]);
+
   const handleSaveVigia = async () => {
     if (!selectedPoint) return;
 
@@ -467,101 +559,7 @@ export default function Locais() {
 
   return (
     <View style={styles.container}>
-      <View style={{ flex: 1 }}>
-        <MapView
-          ref={mapRef}
-          provider={PROVIDER_GOOGLE}
-          style={{ flex: 1, width: SCREEN_WIDTH }}
-          initialRegion={region}
-          showsUserLocation={true}
-          showsMyLocationButton={false}
-          minZoomLevel={5}
-          onPress={uiMode === 'creating' ? handleMapPress : undefined}
-          onRegionChangeComplete={(reg) => setRegion(reg)}
-        >
-          {/* Vigias salvos — Círculos de raio */}
-          {vigias.map(vigia => (
-            <Circle
-              key={`circle-${vigia.id}`}
-              center={{ latitude: vigia.latitude, longitude: vigia.longitude }}
-              radius={vigia.radius}
-              fillColor="rgba(59, 130, 246, 0.12)"
-              strokeColor="rgba(59, 130, 246, 0.45)"
-              strokeWidth={2}
-            />
-          ))}
-
-          {/* Vigias salvos — Marcadores */}
-          {vigias.map(vigia => (
-            <Marker
-              key={`marker-${vigia.id}`}
-              coordinate={{ latitude: vigia.latitude, longitude: vigia.longitude }}
-              title={vigia.name}
-              description={`Raio: ${formatRadius(vigia.radius)}`}
-              anchor={{ x: 0.5, y: 0.5 }}
-              tracksViewChanges={tracksViewChanges}
-            >
-              <View style={styles.vigiaMarkerWrapper} collapsable={false}>
-                <Svg width={36} height={36} viewBox="0 0 36 36">
-                  <SvgCircle cx="18" cy="18" r="13" fill="#1d4ed8" stroke="#fff" strokeWidth={2.5} />
-                  <Path
-                    transform="translate(2, 2)"
-                    d="M16 11C12.8 11 10.1 13 9 16c1.1 3 3.8 5 7 5s5.9-2 7-5c-1.1-3-3.8-5-7-5zm0 8.5a3.5 3.5 0 110-7 3.5 3.5 0 010 7zm0-5.5a2 2 0 100 4 2 2 0 000-4z"
-                    fill="#fff"
-                  />
-                </Svg>
-              </View>
-            </Marker>
-          ))}
-
-          {/* Marcador Temporário de Pesquisa (Target) */}
-          {uiMode === 'creating' && searchedPoint && (
-            <Marker coordinate={searchedPoint} anchor={{ x: 0.5, y: 1 }}>
-              <View style={{ alignItems: 'center' }}>
-                <View style={styles.targetCallout}>
-                  <Text style={styles.targetCalloutText}>Toque aqui para confirmar</Text>
-                </View>
-                <Svg width={40} height={40} viewBox="0 0 40 40">
-                  <SvgCircle cx="20" cy="20" r="18" fill="rgba(255, 255, 255, 0.3)" stroke="#fff" strokeWidth={2} strokeDasharray="4 4" />
-                  <SvgCircle cx="20" cy="20" r="4" fill="#fff" />
-                  <Path d="M20 2v6M20 38v-6M2 20h6M38 20h-6" stroke="#fff" strokeWidth={2} strokeLinecap="round" />
-                </Svg>
-              </View>
-            </Marker>
-          )}
-
-          {/* Ponto selecionado durante criação — Círculo preview */}
-          {uiMode === 'creating' && selectedPoint && (
-            <Circle
-              center={selectedPoint}
-              radius={vigiaRadius}
-              fillColor="rgba(59, 130, 246, 0.15)"
-              strokeColor="rgba(59, 130, 246, 0.6)"
-              strokeWidth={2}
-            />
-          )}
-
-          {/* Ponto selecionado durante criação — Marcador */}
-          {uiMode === 'creating' && selectedPoint && (
-            <Marker
-              coordinate={selectedPoint}
-              anchor={{ x: 0.5, y: 0.5 }}
-              tracksViewChanges={true}
-            >
-              <View style={styles.vigiaMarkerWrapper} collapsable={false}>
-                <Svg width={40} height={40} viewBox="0 0 40 40">
-                  <SvgCircle cx="20" cy="20" r="15" fill="#2563eb" stroke="#fff" strokeWidth={3} />
-                  <Path
-                    transform="translate(2, 2)"
-                    d="M18 12.5C14.5 12.5 11.6 14.7 10.4 18c1.2 3.3 4.1 5.5 7.6 5.5s6.4-2.2 7.6-5.5c-1.2-3.3-4.1-5.5-7.6-5.5zm0 9a3.8 3.8 0 110-7.6 3.8 3.8 0 010 7.6zm0-6a2.2 2.2 0 100 4.4 2.2 2.2 0 000-4.4z"
-                    fill="#fff"
-                  />
-                </Svg>
-              </View>
-            </Marker>
-          )}
-        </MapView>
-
+      <View style={{ flex: 1, zIndex: 0 }}>
         {/* ================= OVERLAY: MODO CRIAÇÃO — INSTRUÇÃO + CANCELAR ================= */}
         {uiMode === 'creating' && (
           <>
@@ -918,7 +916,7 @@ export default function Locais() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: 'transparent',
   },
   centered: {
     flex: 1,

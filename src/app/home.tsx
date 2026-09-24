@@ -1,7 +1,7 @@
-import { useState, useEffect } from 'react';
-import { Dimensions, StyleSheet, Text, View, TouchableOpacity, LayoutAnimation, Platform, UIManager, Image } from 'react-native';
-import { TabView, SceneMap } from 'react-native-tab-view';
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { Dimensions, StyleSheet, Text, View, TouchableOpacity, LayoutAnimation, Platform, PanResponder, Animated as RNAnimated, InteractionManager } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+
 import TopMenu from '../../components/TopMenu';
 import Dados from './tabs/dados';
 import Relatos from './tabs/relatos';
@@ -10,30 +10,31 @@ import { useFonts } from 'expo-font';
 import FontAwesome6 from '@expo/vector-icons/FontAwesome6';
 import Animated, { LinearTransition, FadeIn, FadeOut } from 'react-native-reanimated';
 import { useVigiaCreation } from '../context/VigiaCreationContext';
+import { useSharedMap } from '../context/SharedMapContext';
 import { useLocalSearchParams } from 'expo-router';
+import SharedMapView from '../components/SharedMapView';
+
+const SCREEN_WIDTH = Dimensions.get('window').width;
 
 const AnimatedTouchableOpacity = Animated.createAnimatedComponent(TouchableOpacity);
-
-const initialLayout = { width: Dimensions.get('window').width };
 
 function Spacer() {
   const insets = useSafeAreaInsets();
   return <View style={{ paddingTop: insets.top, backgroundColor: "#F5F5F5" }}></View>
 }
 
-export default function Home() {
+export function HomeContent() {
   const [fontsLoaded] = useFonts({
     texgyR: require('../../assets/fontes/texgyreadventor-regular.otf'),
   });
 
   const [index, setIndex] = useState(0);
-  const params = useLocalSearchParams();
-
+  const indexRef = useRef(index);
   useEffect(() => {
-    if (params.switchTab === 'relatos') {
-      setIndex(1);
-    }
-  }, [params.switchTab]);
+    indexRef.current = index;
+  }, [index]);
+
+  const translateX = useRef(new RNAnimated.Value(-index * SCREEN_WIDTH)).current;
 
   const [routes] = useState([
     { key: 'dados', title: 'Dados', icon: 'chart-line' },
@@ -42,33 +43,105 @@ export default function Home() {
   ]);
 
   const { isCreatingVigia } = useVigiaCreation();
+  const { setActiveTab, setMapInteractionEnabled, isCreatingRelato } = useSharedMap();
 
-  const renderScene = SceneMap({
-    dados: Dados,
-    relatos: Relatos,
-    locais: Locais,
-  });
+  const animateToTab = useCallback((i: number) => {
+    RNAnimated.spring(translateX, {
+      toValue: -i * SCREEN_WIDTH,
+      useNativeDriver: true,
+      friction: 26,
+      tension: 170,
+    }).start();
+  }, [translateX]);
 
-  const renderTabBar = () => null;
-
-  if (!fontsLoaded) return null;
-
-  const handleTabPress = (i: number) => {
-    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+  const handleTabPress = useCallback((i: number) => {
     setIndex(i);
-  };
+    animateToTab(i);
+    
+    // Crucial for performance: defer the heavy map state updates
+    // until after the swipe animation finishes, avoiding stuttering.
+    InteractionManager.runAfterInteractions(() => {
+      setActiveTab(i);
+      setMapInteractionEnabled(true);
+    });
+  }, [animateToTab, setActiveTab, setMapInteractionEnabled]);
+
+  const params = useLocalSearchParams();
+
+  useEffect(() => {
+    if (params.switchTab === 'relatos') {
+      handleTabPress(1);
+    }
+  }, [params.switchTab, handleTabPress]);
+
+  // Full-screen PanResponder using CAPTURE to intercept strictly horizontal
+  // swipes before the MapView (a child) claims them. Non-horizontal gestures
+  // are left alone so the map can pan/zoom freely.
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => false,
+      onStartShouldSetPanResponderCapture: () => false,
+      onMoveShouldSetPanResponder: () => false,
+      onMoveShouldSetPanResponderCapture: (_, gestureState) => {
+        if (isCreatingVigia || isCreatingRelato) return false;
+        const absDx = Math.abs(gestureState.dx);
+        const absDy = Math.abs(gestureState.dy);
+        return absDx > 10 && absDx > absDy * 2;
+      },
+      onPanResponderMove: (_, gestureState) => {
+        // Follow finger 1:1 for a fluid feel, clamped to valid range
+        const baseOffset = -indexRef.current * SCREEN_WIDTH;
+        const minOffset = -SCREEN_WIDTH * (routes.length - 1);
+        const raw = baseOffset + gestureState.dx;
+        translateX.setValue(Math.max(minOffset, Math.min(0, raw)));
+      },
+      onPanResponderRelease: (_, gestureState) => {
+        let newIndex = indexRef.current;
+        // Use velocity OR distance to decide
+        if (gestureState.vx > 0.4 || gestureState.dx > SCREEN_WIDTH * 0.2) {
+          newIndex = Math.max(0, newIndex - 1);
+        } else if (gestureState.vx < -0.4 || gestureState.dx < -SCREEN_WIDTH * 0.2) {
+          newIndex = Math.min(routes.length - 1, newIndex + 1);
+        }
+        
+        if (newIndex === indexRef.current) {
+          // Snap back if threshold not met
+          animateToTab(indexRef.current);
+        } else {
+          handleTabPress(newIndex);
+        }
+      },
+      onPanResponderTerminate: () => {
+        animateToTab(indexRef.current);
+      },
+    })
+  ).current;
 
   return (
     <View style={styles.container}>
-      <TabView
-        navigationState={{ index, routes }}
-        renderScene={renderScene}
-        onIndexChange={handleTabPress}
-        initialLayout={initialLayout}
-        renderTabBar={renderTabBar}
-        swipeEnabled={!isCreatingVigia}
-      />
-      {!isCreatingVigia && (
+      {/* Gesture wrapper: map + tabs are both CHILDREN so capture phase works */}
+      <View style={StyleSheet.absoluteFill} pointerEvents="box-none" {...panResponder.panHandlers}>
+        {/* ================= SHARED MAP ================= */}
+        <SharedMapView />
+
+        {/* ================= SWIPEABLE TAB VIEWS ================= */}
+        <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
+          <RNAnimated.View
+            style={[
+              StyleSheet.absoluteFill,
+              { flexDirection: 'row', width: SCREEN_WIDTH * 3, transform: [{ translateX }] }
+            ]}
+            pointerEvents="box-none"
+          >
+            <View style={{ width: SCREEN_WIDTH }} pointerEvents="box-none"><Dados /></View>
+            <View style={{ width: SCREEN_WIDTH }} pointerEvents="box-none"><Relatos /></View>
+            <View style={{ width: SCREEN_WIDTH }} pointerEvents="box-none"><Locais /></View>
+          </RNAnimated.View>
+        </View>
+      </View>
+
+      {/* ================= TOP OVERLAY ================= */}
+      {!(isCreatingVigia || isCreatingRelato) && (
         <View style={styles.overlayContainer} pointerEvents="box-none">
           <View style={styles.topSection}>
             <Spacer />
@@ -102,6 +175,10 @@ export default function Home() {
       )}
     </View>
   );
+}
+
+export default function Home() {
+  return <HomeContent />;
 }
 
 const styles = StyleSheet.create({

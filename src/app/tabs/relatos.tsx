@@ -3,7 +3,7 @@ import { FontAwesome6 } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useState, useEffect, useRef } from 'react';
 import { Alert, RefreshControl, Modal } from 'react-native';
-import MapView, { Marker, PROVIDER_GOOGLE, Region, MapPressEvent } from 'react-native-maps';
+import { Marker, Region, MapPressEvent } from 'react-native-maps';
 import Svg, { Path, Circle as SvgCircle } from 'react-native-svg';
 import { lifeCrimesKeys, physicalCrimesKeys, patrimonyCrimesKeys } from '../../constants/CrimeData';
 
@@ -31,6 +31,7 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import RelatoItem from '../../components/RelatoItem';
 import { useVigiaCreation } from '../../context/VigiaCreationContext';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useSharedMap } from '../../context/SharedMapContext';
 
 
 
@@ -196,14 +197,8 @@ export default function Relatos() {
 
   const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
   const [viewMode, setViewMode] = useState<'map' | 'list'>('map');
-  const mapRef = useRef<MapView | null>(null);
+  const { mapRef, region: sharedRegion, registerMapChildren, setMapPressHandler, setMapInteractionEnabled, userLocation: sharedUserLocation, activeTab, setIsCreatingRelato } = useSharedMap();
   const [userLocation, setUserLocation] = useState<Location.LocationObject | null>(null);
-  const [region, setRegion] = useState<Region>({
-    latitude: -23.5505,
-    longitude: -46.6333,
-    latitudeDelta: 0.08,
-    longitudeDelta: 0.08,
-  });
 
   useEffect(() => {
     let isMounted = true;
@@ -215,7 +210,7 @@ export default function Relatos() {
           const loc = await Location.getCurrentPositionAsync({});
           if (!isMounted) return;
           setUserLocation(loc);
-          setRegion({
+          mapRef.current?.animateToRegion({
             latitude: loc.coords.latitude,
             longitude: loc.coords.longitude,
             latitudeDelta: 0.08,
@@ -228,6 +223,87 @@ export default function Relatos() {
     })();
     return () => { isMounted = false; };
   }, []);
+
+  // Only control map interaction when this tab (relatos = index 1) is active
+  useEffect(() => {
+    if (activeTab === 1) {
+      setMapInteractionEnabled(viewMode === 'map' || uiMode === 'creating_relato');
+    }
+  }, [viewMode, uiMode, setMapInteractionEnabled, activeTab]);
+
+  useEffect(() => {
+    if (uiMode === 'creating_relato') {
+      setMapPressHandler(handleMapPress);
+      setIsCreatingRelato(true);
+    } else {
+      setMapPressHandler(undefined);
+      setIsCreatingRelato(false);
+    }
+  }, [uiMode, handleMapPress, setMapPressHandler, setIsCreatingRelato]);
+
+  useEffect(() => {
+    const markersToRender = (
+      <>
+        {relatos.map(relato => {
+          if (!relato.latitude || !relato.longitude) return null;
+          const markerColor = getRelatoColor(relato.crimeKey);
+          return (
+            <Marker
+              key={`marker-${relato.id}`}
+              coordinate={{ latitude: relato.latitude, longitude: relato.longitude }}
+              anchor={{ x: 0.5, y: 1 }}
+              onPress={() => setSelectedRelatoId(relato.id)}
+            >
+              <View style={{ alignItems: 'center', justifyContent: 'center', width: 40, height: 40 }}>
+                <Svg width={32} height={32} viewBox="0 0 24 24">
+                  <Path
+                    d="M2 4c0-1.1.9-2 2-2h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2h-6l-2 6-2-6H4c-1.1 0-2-.9-2-2V4z"
+                    fill={markerColor}
+                    stroke="#ffffff"
+                    strokeWidth={1.5}
+                  />
+                </Svg>
+              </View>
+            </Marker>
+          )
+        })}
+        {uiMode === 'creating_relato' && searchedPoint && (
+          <Marker coordinate={searchedPoint} anchor={{ x: 0.5, y: 1 }}>
+            <View style={{ alignItems: 'center' }}>
+              <View style={styles.targetCallout}>
+                <Text style={styles.targetCalloutText}>Toque aqui para confirmar</Text>
+              </View>
+              <Svg width={40} height={40} viewBox="0 0 40 40">
+                <SvgCircle cx="20" cy="20" r="18" fill="rgba(255, 255, 255, 0.3)" stroke="#fff" strokeWidth={2} strokeDasharray="4 4" />
+                <SvgCircle cx="20" cy="20" r="4" fill="#fff" />
+                <Path d="M20 2v6M20 38v-6M2 20h6M38 20h-6" stroke="#fff" strokeWidth={2} strokeLinecap="round" />
+              </Svg>
+            </View>
+          </Marker>
+        )}
+
+        {uiMode === 'creating_relato' && selectedPoint && (
+          <Marker
+            coordinate={selectedPoint}
+            anchor={{ x: 0.5, y: 0.5 }}
+            tracksViewChanges={true}
+          >
+            <View style={styles.vigiaMarkerWrapper} collapsable={false}>
+              <Svg width={40} height={40} viewBox="0 0 40 40">
+                <SvgCircle cx="20" cy="20" r="15" fill="#2563eb" stroke="#fff" strokeWidth={3} />
+                <Path
+                  transform="translate(2, 2)"
+                  d="M18 12.5C14.5 12.5 11.6 14.7 10.4 18c1.2 3.3 4.1 5.5 7.6 5.5s6.4-2.2 7.6-5.5c-1.2-3.3-4.1-5.5-7.6-5.5zm0 9a3.8 3.8 0 110-7.6 3.8 3.8 0 010 7.6zm0-6a2.2 2.2 0 100 4.4 2.2 2.2 0 000-4.4z"
+                  fill="#fff"
+                />
+              </Svg>
+            </View>
+          </Marker>
+        )}
+      </>
+    );
+    registerMapChildren('relatos', markersToRender);
+  }, [relatos, uiMode, searchedPoint, selectedPoint, registerMapChildren]);
 
   useEffect(() => {
     if (params.focusLat && params.focusLng) {
@@ -309,80 +385,6 @@ export default function Relatos() {
 
   return (
     <View style={styles.container}>
-      <View style={{ flex: 1, width: SCREEN_WIDTH, height: SCREEN_HEIGHT, position: 'absolute' }}>
-        <MapView
-          ref={mapRef}
-          provider={PROVIDER_GOOGLE}
-          style={{ flex: 1, width: SCREEN_WIDTH, height: SCREEN_HEIGHT }}
-        initialRegion={region}
-        showsUserLocation={true}
-        showsMyLocationButton={false}
-        onRegionChangeComplete={(reg) => setRegion(reg)}
-        scrollEnabled={viewMode === 'map'}
-        zoomEnabled={viewMode === 'map'}
-        pitchEnabled={viewMode === 'map'}
-        rotateEnabled={viewMode === 'map'}
-        onPress={uiMode === 'creating_relato' ? handleMapPress : undefined}
-      >
-        {relatos.map(relato => {
-          if (!relato.latitude || !relato.longitude) return null;
-          const markerColor = getRelatoColor(relato.crimeKey);
-          return (
-            <Marker
-              key={`marker-${relato.id}`}
-              coordinate={{ latitude: relato.latitude, longitude: relato.longitude }}
-              anchor={{ x: 0.5, y: 1 }}
-              onPress={() => setSelectedRelatoId(relato.id)}
-            >
-              <View style={{ alignItems: 'center', justifyContent: 'center', width: 40, height: 40 }}>
-                <Svg width={32} height={32} viewBox="0 0 24 24">
-                  <Path
-                    d="M2 4c0-1.1.9-2 2-2h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2h-6l-2 6-2-6H4c-1.1 0-2-.9-2-2V4z"
-                    fill={markerColor}
-                    stroke="#ffffff"
-                    strokeWidth={1.5}
-                  />
-                </Svg>
-              </View>
-            </Marker>
-          )
-        })}
-        {uiMode === 'creating_relato' && searchedPoint && (
-          <Marker coordinate={searchedPoint} anchor={{ x: 0.5, y: 1 }}>
-            <View style={{ alignItems: 'center' }}>
-              <View style={styles.targetCallout}>
-                <Text style={styles.targetCalloutText}>Toque aqui para confirmar</Text>
-              </View>
-              <Svg width={40} height={40} viewBox="0 0 40 40">
-                <SvgCircle cx="20" cy="20" r="18" fill="rgba(255, 255, 255, 0.3)" stroke="#fff" strokeWidth={2} strokeDasharray="4 4" />
-                <SvgCircle cx="20" cy="20" r="4" fill="#fff" />
-                <Path d="M20 2v6M20 38v-6M2 20h6M38 20h-6" stroke="#fff" strokeWidth={2} strokeLinecap="round" />
-              </Svg>
-            </View>
-          </Marker>
-        )}
-
-        {uiMode === 'creating_relato' && selectedPoint && (
-          <Marker
-            coordinate={selectedPoint}
-            anchor={{ x: 0.5, y: 0.5 }}
-            tracksViewChanges={true}
-          >
-            <View style={styles.vigiaMarkerWrapper} collapsable={false}>
-              <Svg width={40} height={40} viewBox="0 0 40 40">
-                <SvgCircle cx="20" cy="20" r="15" fill="#2563eb" stroke="#fff" strokeWidth={3} />
-                <Path
-                  transform="translate(2, 2)"
-                  d="M18 12.5C14.5 12.5 11.6 14.7 10.4 18c1.2 3.3 4.1 5.5 7.6 5.5s6.4-2.2 7.6-5.5c-1.2-3.3-4.1-5.5-7.6-5.5zm0 9a3.8 3.8 0 110-7.6 3.8 3.8 0 010 7.6zm0-6a2.2 2.2 0 100 4.4 2.2 2.2 0 000-4.4z"
-                  fill="#fff"
-                />
-              </Svg>
-            </View>
-          </Marker>
-        )}
-        </MapView>
-      </View>
-
       {/* LISTA DE RELATOS */}
       {viewMode === 'list' && (
         <View style={[StyleSheet.absoluteFill, { backgroundColor: 'transparent' }]} pointerEvents="box-none">
@@ -678,7 +680,7 @@ export default function Relatos() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#e2e8f0', // Fundo mais escuro
+    backgroundColor: 'transparent',
   },
   scrollContent: {
     paddingTop: 180,

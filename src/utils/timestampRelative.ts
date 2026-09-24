@@ -1,7 +1,7 @@
 export const TempoOcorrido = (timestamp: Date | number | string): String => {
   const agora = new Date();
   const data = new Date(timestamp);
-  const diffSegundos = Math.floor((agora - data) / 1000);
+  const diffSegundos = Math.floor((agora.getTime() - data.getTime()) / 1000);
   
   // Cálculos de tempo
   const minutos = Math.floor(diffSegundos / 60);
