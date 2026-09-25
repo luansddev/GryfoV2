@@ -746,10 +746,10 @@ export default function Dados() {
   /* ================= RENDER ================= */
 
   return (
-    <View style={styles.container}>
-      <View style={{ flex: 1, zIndex: 0 }}>
+    <View style={styles.container} pointerEvents="box-none">
+      <View style={{ flex: 1, zIndex: 0 }} pointerEvents="box-none">
         {/* Controles sobre o mapa (Centralizados acima da tabbar ou acima dos cards) */}
-        <View style={[styles.mapControlsWrapper, !mapExpanded && { bottom: Dimensions.get('window').height * 0.6 + 10 }]}>
+        <View style={[styles.mapControlsWrapper, !mapExpanded && { bottom: Dimensions.get('window').height * 0.6 + 10 }]} pointerEvents="box-none">
           {mapExpanded && (
             <View style={styles.fabRowContainer}>
               <TouchableOpacity

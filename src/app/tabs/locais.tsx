@@ -449,9 +449,9 @@ export default function Locais() {
 
   useEffect(() => {
     if (uiMode === 'creating') {
-      setMapPressHandler(handleMapPress);
+      setMapPressHandler('locais', handleMapPress);
     } else {
-      setMapPressHandler(undefined);
+      setMapPressHandler('locais', undefined);
     }
   }, [uiMode, handleMapPress, setMapPressHandler]);
 
@@ -558,8 +558,8 @@ export default function Locais() {
   /* ================= RENDER ================= */
 
   return (
-    <View style={styles.container}>
-      <View style={{ flex: 1, zIndex: 0 }}>
+    <View style={styles.container} pointerEvents="box-none">
+      <View style={{ flex: 1, zIndex: 0 }} pointerEvents="box-none">
         {/* ================= OVERLAY: MODO CRIAÇÃO — INSTRUÇÃO + CANCELAR ================= */}
         {uiMode === 'creating' && (
           <>
@@ -715,7 +715,7 @@ export default function Locais() {
 
         {/* ================= OVERLAY: MODO IDLE — BOTÕES DE AÇÃO ================= */}
         {uiMode === 'idle' && (
-          <View style={styles.idleControls}>
+          <View style={styles.idleControls} pointerEvents="box-none">
             {/* Botão "Meu local" */}
             <View style={styles.fabRow}>
               <TouchableOpacity

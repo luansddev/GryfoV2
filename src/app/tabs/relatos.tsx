@@ -233,10 +233,10 @@ export default function Relatos() {
 
   useEffect(() => {
     if (uiMode === 'creating_relato') {
-      setMapPressHandler(handleMapPress);
+      setMapPressHandler('relatos', handleMapPress);
       setIsCreatingRelato(true);
     } else {
-      setMapPressHandler(undefined);
+      setMapPressHandler('relatos', undefined);
       setIsCreatingRelato(false);
     }
   }, [uiMode, handleMapPress, setMapPressHandler, setIsCreatingRelato]);
@@ -252,7 +252,11 @@ export default function Relatos() {
               key={`marker-${relato.id}`}
               coordinate={{ latitude: relato.latitude, longitude: relato.longitude }}
               anchor={{ x: 0.5, y: 1 }}
-              onPress={() => setSelectedRelatoId(relato.id)}
+              onPress={() => {
+                if (uiMode !== 'creating_relato') {
+                  setSelectedRelatoId(relato.id);
+                }
+              }}
             >
               <View style={{ alignItems: 'center', justifyContent: 'center', width: 40, height: 40 }}>
                 <Svg width={32} height={32} viewBox="0 0 24 24">
@@ -290,12 +294,9 @@ export default function Relatos() {
           >
             <View style={styles.vigiaMarkerWrapper} collapsable={false}>
               <Svg width={40} height={40} viewBox="0 0 40 40">
-                <SvgCircle cx="20" cy="20" r="15" fill="#2563eb" stroke="#fff" strokeWidth={3} />
-                <Path
-                  transform="translate(2, 2)"
-                  d="M18 12.5C14.5 12.5 11.6 14.7 10.4 18c1.2 3.3 4.1 5.5 7.6 5.5s6.4-2.2 7.6-5.5c-1.2-3.3-4.1-5.5-7.6-5.5zm0 9a3.8 3.8 0 110-7.6 3.8 3.8 0 010 7.6zm0-6a2.2 2.2 0 100 4.4 2.2 2.2 0 000-4.4z"
-                  fill="#fff"
-                />
+                <SvgCircle cx="20" cy="20" r="18" fill="rgba(255, 255, 255, 0.3)" stroke="#fff" strokeWidth={2} strokeDasharray="4 4" />
+                <SvgCircle cx="20" cy="20" r="4" fill="#fff" />
+                <Path d="M20 2v6M20 38v-6M2 20h6M38 20h-6" stroke="#fff" strokeWidth={2} strokeLinecap="round" />
               </Svg>
             </View>
           </Marker>
@@ -384,7 +385,7 @@ export default function Relatos() {
   }, [searchMode, searchedCity, userCity]);
 
   return (
-    <View style={styles.container}>
+    <View style={styles.container} pointerEvents="box-none">
       {/* LISTA DE RELATOS */}
       {viewMode === 'list' && (
         <View style={[StyleSheet.absoluteFill, { backgroundColor: 'transparent' }]} pointerEvents="box-none">
@@ -443,7 +444,7 @@ export default function Relatos() {
 
       {/* CONTROLES INFERIORES */}
       {uiMode === 'idle' && (
-        <View style={styles.idleControls}>
+        <View style={styles.idleControls} pointerEvents="box-none">
           {viewMode === 'map' && (
           <View style={styles.fabRow}>
             <TouchableOpacity

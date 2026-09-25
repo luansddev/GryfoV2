@@ -74,6 +74,11 @@ export function HomeContent() {
     }
   }, [params.switchTab, handleTabPress]);
 
+  const stateRef = useRef({ isCreatingVigia, isCreatingRelato, handleTabPress });
+  useEffect(() => {
+    stateRef.current = { isCreatingVigia, isCreatingRelato, handleTabPress };
+  }, [isCreatingVigia, isCreatingRelato, handleTabPress]);
+
   // Full-screen PanResponder using CAPTURE to intercept strictly horizontal
   // swipes before the MapView (a child) claims them. Non-horizontal gestures
   // are left alone so the map can pan/zoom freely.
@@ -83,7 +88,7 @@ export function HomeContent() {
       onStartShouldSetPanResponderCapture: () => false,
       onMoveShouldSetPanResponder: () => false,
       onMoveShouldSetPanResponderCapture: (_, gestureState) => {
-        if (isCreatingVigia || isCreatingRelato) return false;
+        if (stateRef.current.isCreatingVigia || stateRef.current.isCreatingRelato) return false;
         const absDx = Math.abs(gestureState.dx);
         const absDy = Math.abs(gestureState.dy);
         return absDx > 10 && absDx > absDy * 2;
@@ -108,7 +113,7 @@ export function HomeContent() {
           // Snap back if threshold not met
           animateToTab(indexRef.current);
         } else {
-          handleTabPress(newIndex);
+          stateRef.current.handleTabPress(newIndex);
         }
       },
       onPanResponderTerminate: () => {
@@ -119,25 +124,22 @@ export function HomeContent() {
 
   return (
     <View style={styles.container}>
-      {/* Gesture wrapper: map + tabs are both CHILDREN so capture phase works */}
-      <View style={StyleSheet.absoluteFill} pointerEvents="box-none" {...panResponder.panHandlers}>
-        {/* ================= SHARED MAP ================= */}
-        <SharedMapView />
+      {/* ================= SHARED MAP ================= */}
+      <SharedMapView />
 
-        {/* ================= SWIPEABLE TAB VIEWS ================= */}
-        <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
-          <RNAnimated.View
-            style={[
-              StyleSheet.absoluteFill,
-              { flexDirection: 'row', width: SCREEN_WIDTH * 3, transform: [{ translateX }] }
-            ]}
-            pointerEvents="box-none"
-          >
-            <View style={{ width: SCREEN_WIDTH }} pointerEvents="box-none"><Dados /></View>
-            <View style={{ width: SCREEN_WIDTH }} pointerEvents="box-none"><Relatos /></View>
-            <View style={{ width: SCREEN_WIDTH }} pointerEvents="box-none"><Locais /></View>
-          </RNAnimated.View>
-        </View>
+      {/* ================= SWIPEABLE TAB VIEWS ================= */}
+      <View style={StyleSheet.absoluteFill} pointerEvents="box-none" {...panResponder.panHandlers}>
+        <RNAnimated.View
+          style={[
+            StyleSheet.absoluteFill,
+            { flexDirection: 'row', width: SCREEN_WIDTH * 3, transform: [{ translateX }] }
+          ]}
+          pointerEvents="box-none"
+        >
+          <View style={{ width: SCREEN_WIDTH }} pointerEvents="box-none"><Dados /></View>
+          <View style={{ width: SCREEN_WIDTH }} pointerEvents="box-none"><Relatos /></View>
+          <View style={{ width: SCREEN_WIDTH }} pointerEvents="box-none"><Locais /></View>
+        </RNAnimated.View>
       </View>
 
       {/* ================= TOP OVERLAY ================= */}

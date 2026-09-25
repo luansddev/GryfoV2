@@ -15,8 +15,8 @@ interface SharedMapContextType {
   registerMapChildren: (key: string, children: ReactNode) => void;
   getMapChildren: (key: string) => ReactNode;
 
-  // Map press handler — set by the active tab for creation flows
-  setMapPressHandler: (handler: ((e: MapPressEvent) => void) | undefined) => void;
+  // Map press handler — tabs register their handlers by key
+  setMapPressHandler: (key: string, handler: ((e: MapPressEvent) => void) | undefined) => void;
   handleMapPress: (e: MapPressEvent) => void;
 
   // Map interaction control (scroll/zoom/pitch/rotate)
@@ -54,14 +54,18 @@ export function SharedMapProvider({ children }: { children: ReactNode }) {
   }, []);
 
   /* ================= MAP PRESS HANDLER ================= */
-  const mapPressRef = useRef<((e: MapPressEvent) => void) | undefined>(undefined);
+  const mapPressHandlers = useRef<{ [key: string]: (e: MapPressEvent) => void }>({});
 
-  const setMapPressHandler = useCallback((handler: ((e: MapPressEvent) => void) | undefined) => {
-    mapPressRef.current = handler;
+  const setMapPressHandler = useCallback((key: string, handler: ((e: MapPressEvent) => void) | undefined) => {
+    if (handler) {
+      mapPressHandlers.current[key] = handler;
+    } else {
+      delete mapPressHandlers.current[key];
+    }
   }, []);
 
   const handleMapPress = useCallback((e: MapPressEvent) => {
-    mapPressRef.current?.(e);
+    Object.values(mapPressHandlers.current).forEach(handler => handler(e));
   }, []);
 
   /* ================= LOCATION INIT ================= */
