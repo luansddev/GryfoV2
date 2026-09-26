@@ -91,18 +91,18 @@ const MeusRelatos = () => {
           <Text style={styles.sceneText}>Você ainda não criou nenhum relato</Text>
         </View>
       ) : (
-        <ScrollView 
+        <ScrollView
           contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 120, paddingTop: 24 }}
           showsVerticalScrollIndicator={false}
           style={{ width: '100%', flex: 1 }}
         >
           {relatos.map((relato, index) => (
-            <RelatoItem 
-              key={relato.id} 
-              relato={relato} 
-              currentDeviceId={currentDeviceId} 
-              index={index} 
-              showCityHeader={true} 
+            <RelatoItem
+              key={relato.id}
+              relato={relato}
+              currentDeviceId={currentDeviceId}
+              index={index}
+              showCityHeader={true}
               onViewOnMap={(r) => {
                 router.push({
                   pathname: '/home',
@@ -118,10 +118,11 @@ const MeusRelatos = () => {
 };
 
 const Rascunhos = () => {
+  const router = useRouter();
   const [rascunhos, setRascunhos] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [currentDeviceId, setCurrentDeviceId] = useState<string | null>(null);
-  
+
   const [editingDraft, setEditingDraft] = useState<any | null>(null);
   const [isModalVisible, setIsModalVisible] = useState(false);
 
@@ -192,16 +193,16 @@ const Rascunhos = () => {
           <Text style={styles.sceneText}>Seus rascunhos aparecerão aqui</Text>
         </View>
       ) : (
-        <ScrollView 
+        <ScrollView
           contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 120, paddingTop: 24 }}
           showsVerticalScrollIndicator={false}
           style={{ width: '100%', flex: 1 }}
         >
           {rascunhos.map((rascunho, index) => (
-            <RascunhoItem 
-              key={rascunho.id} 
-              rascunho={rascunho} 
-              index={index} 
+            <RascunhoItem
+              key={rascunho.id}
+              rascunho={rascunho}
+              index={index}
               onEdit={handleEdit}
             />
           ))}
@@ -209,8 +210,8 @@ const Rascunhos = () => {
       )}
 
       {/* Modal para edição de rascunhos */}
-      <AddRelatoModal 
-        visible={isModalVisible} 
+      <AddRelatoModal
+        visible={isModalVisible}
         onClose={handleCloseModal}
         draftData={editingDraft ? { texto: editingDraft.texto, crimeKey: editingDraft.crimeKey } : undefined}
         draftId={editingDraft?.id}
@@ -221,7 +222,7 @@ const Rascunhos = () => {
             await updateDoc(doc(db, 'rascunhos', editingDraft.id), { texto: text, crimeKey });
           }
           handleCloseModal();
-          router.push({ pathname: '/(tabs)/relatos', params: { editDraftId: editingDraft?.id } });
+          router.push({ pathname: '/tabs/relatos', params: { editDraftId: editingDraft?.id } });
         }}
       />
     </View>
@@ -294,18 +295,18 @@ const Salvos = () => {
           <Text style={styles.sceneText}>Você não possui relatos salvos</Text>
         </View>
       ) : (
-        <ScrollView 
+        <ScrollView
           contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 120, paddingTop: 24 }}
           showsVerticalScrollIndicator={false}
           style={{ width: '100%', flex: 1 }}
         >
           {relatos.map((relato, index) => (
-            <RelatoItem 
-              key={relato.id} 
-              relato={relato} 
-              currentDeviceId={currentDeviceId} 
-              index={index} 
-              showCityHeader={true} 
+            <RelatoItem
+              key={relato.id}
+              relato={relato}
+              currentDeviceId={currentDeviceId}
+              index={index}
+              showCityHeader={true}
               onViewOnMap={(r) => {
                 router.push({
                   pathname: '/home',
@@ -322,7 +323,7 @@ const Salvos = () => {
 
 export default function Biblioteca() {
   const router = useRouter();
-  
+
   const [fontsLoaded] = useFonts({
     texgyR: require('../../assets/fontes/texgyreadventor-regular.otf'),
     texgyB: require('../../assets/fontes/texgyreadventor-bold.otf'),
@@ -360,7 +361,7 @@ export default function Biblioteca() {
         renderTabBar={renderTabBar}
       />
       <View style={styles.overlayContainer} pointerEvents="box-none">
-        
+
         {/* Nav Bar Superior Própria (Mesmo estilo do TopMenu mas com título e voltar) */}
         <View style={styles.topSection}>
           <Spacer />
@@ -368,12 +369,12 @@ export default function Biblioteca() {
             <TouchableOpacity onPress={() => router.back()} style={styles.backButton} activeOpacity={0.7}>
               <FontAwesome6 name="arrow-left" size={18} color="#333" />
             </TouchableOpacity>
-            
+
             <View style={styles.titleContainer}>
               <FontAwesome6 name="book-bookmark" size={18} color="#000" style={{ marginRight: 8 }} />
               <Text style={styles.titleText}>Biblioteca</Text>
             </View>
-            
+
             {/* Espaçador invisível para manter o título centralizado */}
             <View style={[styles.backButton, { backgroundColor: 'transparent' }]} pointerEvents="none" />
           </View>
@@ -382,40 +383,40 @@ export default function Biblioteca() {
         {/* Cápsulas de navegação das abas internas */}
         <View style={styles.capsulesContainer} pointerEvents="box-none">
           {routes.map((route, i) => {
-             const isActive = index === i;
-             return (
-                 <AnimatedTouchableOpacity
-                 key={route.key}
-                 style={[styles.capsule, isActive && styles.capsuleActive]}
-                 onPress={() => handleTabPress(i)}
-                 activeOpacity={0.8}
-                 layout={LinearTransition.duration(250)}
-               >
-                 {/* Invisible placeholder to drive the capsule's layout size instantly */}
-                 <View style={{ opacity: 0 }} pointerEvents="none">
-                   {isActive ? (
-                     <Text style={[styles.capsuleText, styles.capsuleTextActive]}>
-                       {route.title}
-                     </Text>
-                   ) : (
-                     <FontAwesome6 name={route.icon} size={16} color="#666" />
-                   )}
-                 </View>
+            const isActive = index === i;
+            return (
+              <AnimatedTouchableOpacity
+                key={route.key}
+                style={[styles.capsule, isActive && styles.capsuleActive]}
+                onPress={() => handleTabPress(i)}
+                activeOpacity={0.8}
+                layout={LinearTransition.duration(250)}
+              >
+                {/* Invisible placeholder to drive the capsule's layout size instantly */}
+                <View style={{ opacity: 0 }} pointerEvents="none">
+                  {isActive ? (
+                    <Text style={[styles.capsuleText, styles.capsuleTextActive]}>
+                      {route.title}
+                    </Text>
+                  ) : (
+                    <FontAwesome6 name={route.icon} size={16} color="#666" />
+                  )}
+                </View>
 
-                 {/* Absolute elements for smooth crossfade without layout interference */}
-                 {isActive ? (
-                   <Animated.View entering={FadeIn.duration(200)} exiting={FadeOut.duration(200)} style={[StyleSheet.absoluteFill, { alignItems: 'center', justifyContent: 'center' }]} pointerEvents="none">
-                     <Text style={[styles.capsuleText, styles.capsuleTextActive]}>
-                       {route.title}
-                     </Text>
-                   </Animated.View>
-                 ) : (
-                   <Animated.View entering={FadeIn.duration(200)} exiting={FadeOut.duration(200)} style={[StyleSheet.absoluteFill, { alignItems: 'center', justifyContent: 'center' }]} pointerEvents="none">
-                     <FontAwesome6 name={route.icon} size={16} color="#666" />
-                   </Animated.View>
-                 )}
-               </AnimatedTouchableOpacity>
-             );
+                {/* Absolute elements for smooth crossfade without layout interference */}
+                {isActive ? (
+                  <Animated.View entering={FadeIn.duration(200)} exiting={FadeOut.duration(200)} style={[StyleSheet.absoluteFill, { alignItems: 'center', justifyContent: 'center' }]} pointerEvents="none">
+                    <Text style={[styles.capsuleText, styles.capsuleTextActive]}>
+                      {route.title}
+                    </Text>
+                  </Animated.View>
+                ) : (
+                  <Animated.View entering={FadeIn.duration(200)} exiting={FadeOut.duration(200)} style={[StyleSheet.absoluteFill, { alignItems: 'center', justifyContent: 'center' }]} pointerEvents="none">
+                    <FontAwesome6 name={route.icon} size={16} color="#666" />
+                  </Animated.View>
+                )}
+              </AnimatedTouchableOpacity>
+            );
           })}
         </View>
       </View>
