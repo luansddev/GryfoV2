@@ -222,7 +222,7 @@ const Rascunhos = () => {
             await updateDoc(doc(db, 'rascunhos', editingDraft.id), { texto: text, crimeKey });
           }
           handleCloseModal();
-          router.push({ pathname: '/tabs/relatos', params: { editDraftId: editingDraft?.id } });
+          router.push({ pathname: '/home', params: { switchTab: 'relatos', editDraftId: editingDraft?.id } });
         }}
       />
     </View>
