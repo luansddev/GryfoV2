@@ -19,7 +19,7 @@ const getRelatoColor = (natureza?: string) => {
 import * as Location from 'expo-location';
 import AddRelatoModal from '../../components/AddRelatoModal';
 import { db, auth } from '../../config/firebaseConfig';
-import { collection, query, where, orderBy, onSnapshot, doc, updateDoc, increment, deleteDoc } from 'firebase/firestore';
+import { collection, query, where, orderBy, onSnapshot, doc, updateDoc, increment, deleteDoc, getDoc } from 'firebase/firestore';
 import { onAuthStateChanged } from 'firebase/auth';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useSearchLocation } from '../../context/SearchLocationContext';
@@ -51,6 +51,21 @@ export default function Relatos() {
   const [creatingStep, setCreatingStep] = useState<'picking' | 'configuring'>('picking');
   const [selectedPoint, setSelectedPoint] = useState<{ latitude: number; longitude: number } | null>(null);
   const [selectedAddress, setSelectedAddress] = useState<string | null>(null);
+  const [selectedCityName, setSelectedCityName] = useState<string | null>(null);
+  const [visitorModalInfo, setVisitorModalInfo] = useState<{clickedCity: string, physicalCity: string} | null>(null);
+  const [noLocationModalVisible, setNoLocationModalVisible] = useState(false);
+  
+  const [activeDraftText, setActiveDraftText] = useState<string | null>(null);
+  const [activeDraftCrime, setActiveDraftCrime] = useState<string | null>(null);
+  const [activeDraftId, setActiveDraftId] = useState<string | undefined>(undefined);
+
+  const openAddRelatoModal = () => {
+    setUiMode('idle');
+    setIsCreatingVigia(false);
+    setCreatingStep('picking');
+    setIsAddModalVisible(true);
+  };
+
   const [loadingAddress, setLoadingAddress] = useState(false);
   const [searchedPoint, setSearchedPoint] = useState<{ latitude: number; longitude: number } | null>(null);
 
@@ -74,6 +89,40 @@ export default function Relatos() {
       hideSub.remove();
     };
   }, []);
+
+  useEffect(() => {
+    if (params.editDraftId) {
+      const draftId = params.editDraftId as string;
+      const fetchDraft = async () => {
+        try {
+          const docSnap = await getDoc(doc(db, 'rascunhos', draftId));
+          if (docSnap.exists()) {
+            const data = docSnap.data();
+            setActiveDraftText(data.texto || null);
+            setActiveDraftCrime(data.crimeKey || null);
+            setActiveDraftId(draftId);
+            if (data.latitude && data.longitude) {
+              setSelectedPoint({ latitude: data.latitude, longitude: data.longitude });
+              setSelectedCityName(data.cidade || null);
+              mapRef.current?.animateToRegion({
+                latitude: data.latitude,
+                longitude: data.longitude,
+                latitudeDelta: 0.02,
+                longitudeDelta: 0.02,
+              });
+            }
+            setUiMode('creating_relato');
+            setIsCreatingVigia(true);
+            setCreatingStep('picking');
+            setIsAddModalVisible(false);
+          }
+        } catch (e) {
+          console.error("Erro buscando rascunho: ", e);
+        }
+      };
+      fetchDraft();
+    }
+  }, [params.editDraftId]);
 
   const handleSearchAddress = (text: string) => {
     setSearchText(text);
@@ -118,57 +167,85 @@ export default function Relatos() {
     });
   };
 
-  const fetchAddress = async (latitude: number, longitude: number): Promise<string> => {
+  const formatCityForDisplay = (city: string) => {
+    return city.replace(/\bS\./i, 'São ').toLowerCase().split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+  };
+
+  const fetchAddressInfo = async (latitude: number, longitude: number): Promise<{ address: string, cityName: string | null }> => {
+    let address = `${latitude.toFixed(4)}, ${longitude.toFixed(4)}`;
+    let cityName: string | null = null;
+    
     try {
       const results = await Location.reverseGeocodeAsync({ latitude, longitude });
       if (results && results.length > 0) {
         const item = results[0];
+        cityName = item.city || item.subregion || null;
+        
         const street = item.street || item.name || '';
         const number = item.streetNumber ? `, ${item.streetNumber}` : '';
         const district = item.district || item.subregion ? ` - ${item.district || item.subregion}` : '';
-        const city = item.city ? `, ${item.city}` : '';
-        const formatted = `${street}${number}${district}${city}`.replace(/^[\s,-]+/, '').trim();
-        if (formatted.length > 3) return formatted;
+        const cityStr = item.city ? `, ${item.city}` : '';
+        const formatted = `${street}${number}${district}${cityStr}`.replace(/^[\s,-]+/, '').trim();
+        if (formatted.length > 3) {
+           address = formatted;
+        }
       }
     } catch (e) { }
-    try {
-      const res = await fetch(
-        `https://nominatim.openstreetmap.org/reverse?lat=${latitude}&lon=${longitude}&format=json&accept-language=pt-BR`,
-        { headers: { 'User-Agent': 'Gryfo/1.0' } }
-      );
-      const data = await res.json();
-      if (data && data.address) {
-        const road = data.address.road || data.address.pedestrian || data.address.suburb || '';
-        const num = data.address.house_number ? `, ${data.address.house_number}` : '';
-        const suburb = data.address.suburb || data.address.neighbourhood ? ` - ${data.address.suburb || data.address.neighbourhood}` : '';
-        const city = data.address.city || data.address.town || data.address.municipality || '';
-        const formatted = `${road}${num}${suburb}${city ? `, ${city}` : ''}`.replace(/^[\s,-]+/, '').trim();
-        if (formatted.length > 3) return formatted;
-        if (data.display_name) return data.display_name.split(',').slice(0, 3).join(',');
-      }
-    } catch (err) {}
-    return `${latitude.toFixed(4)}, ${longitude.toFixed(4)}`;
+
+    if (!cityName || address === `${latitude.toFixed(4)}, ${longitude.toFixed(4)}`) {
+      try {
+        const res = await fetch(
+          `https://nominatim.openstreetmap.org/reverse?lat=${latitude}&lon=${longitude}&format=json&accept-language=pt-BR`,
+          { headers: { 'User-Agent': 'Gryfo/1.0' } }
+        );
+        const data = await res.json();
+        if (data && data.address) {
+          cityName = data.address.city || data.address.town || data.address.municipality || cityName;
+          
+          const road = data.address.road || data.address.pedestrian || data.address.suburb || '';
+          const num = data.address.house_number ? `, ${data.address.house_number}` : '';
+          const suburb = data.address.suburb || data.address.neighbourhood ? ` - ${data.address.suburb || data.address.neighbourhood}` : '';
+          const cityStr = data.address.city || data.address.town || data.address.municipality || '';
+          const formatted = `${road}${num}${suburb}${cityStr ? `, ${cityStr}` : ''}`.replace(/^[\s,-]+/, '').trim();
+          
+          if (formatted.length > 3) {
+            address = formatted;
+          } else if (data.display_name) {
+            address = data.display_name.split(',').slice(0, 3).join(',');
+          }
+        }
+      } catch (err) {}
+    }
+    
+    return { address, cityName };
   };
 
   const handleMapPress = async (e: MapPressEvent) => {
     if (uiMode !== 'creating_relato') return;
     const { latitude, longitude } = e.nativeEvent.coordinate;
-    setSelectedPoint({ latitude, longitude });
-    setSearchedPoint(null);
-    setCreatingStep('configuring');
-    mapRef.current?.animateToRegion({
-      latitude,
-      longitude,
-      latitudeDelta: 0.02,
-      longitudeDelta: 0.02,
-    });
+
     setLoadingAddress(true);
-    setSelectedAddress(null);
+    
     try {
-      const addr = await fetchAddress(latitude, longitude);
-      setSelectedAddress(addr);
+      const { address, cityName } = await fetchAddressInfo(latitude, longitude);
+      setSelectedCityName(cityName);
+      
+      setSelectedPoint({ latitude, longitude });
+      setSearchedPoint(null);
+      setCreatingStep('configuring');
+      mapRef.current?.animateToRegion({
+        latitude,
+        longitude,
+        latitudeDelta: 0.02,
+        longitudeDelta: 0.02,
+      });
+      setSelectedAddress(address);
     } catch {
+      // Se a rede falhar, permite continuar com coordenadas puras
+      setSelectedCityName(null);
+      setSelectedPoint({ latitude, longitude });
       setSelectedAddress(`${latitude.toFixed(4)}, ${longitude.toFixed(4)}`);
+      setCreatingStep('configuring');
     } finally {
       setLoadingAddress(false);
     }
@@ -182,6 +259,10 @@ export default function Relatos() {
     setCreatingStep('picking');
     setSelectedPoint(null);
     setSelectedAddress(null);
+    setSelectedCityName(null);
+    setActiveDraftText(null);
+    setActiveDraftCrime(null);
+    setActiveDraftId(undefined);
     setLoadingAddress(false);
     setSearchedPoint(null);
     setSearchText('');
@@ -582,7 +663,7 @@ export default function Relatos() {
                   style={{ marginTop: 12, alignSelf: 'center', flexDirection: 'row', alignItems: 'center', padding: 8 }}
                   onPress={() => {
                     handleCancelCreating();
-                    setIsAddModalVisible(true);
+                    setNoLocationModalVisible(true);
                   }}
                   activeOpacity={0.7}
                 >
@@ -628,10 +709,14 @@ export default function Relatos() {
                 <TouchableOpacity
                   style={styles.saveBtn}
                   onPress={() => {
-                    setUiMode('idle');
-                    setIsCreatingVigia(false);
-                    setCreatingStep('picking');
-                    setIsAddModalVisible(true);
+                    const physicalCityNormalized = normalizarCidade(userCity || 'São Paulo');
+                    const clickedCityNormalized = selectedCityName ? normalizarCidade(selectedCityName) : null;
+                    
+                    if (clickedCityNormalized && clickedCityNormalized !== physicalCityNormalized) {
+                      setVisitorModalInfo({ clickedCity: selectedCityName!, physicalCity: userCity || 'São Paulo' });
+                    } else {
+                      openAddRelatoModal();
+                    }
                   }}
                   activeOpacity={0.8}
                 >
@@ -666,13 +751,80 @@ export default function Relatos() {
         </View>
       )}
 
+      {/* VISITOR WARNING MODAL */}
+      <Modal visible={!!visitorModalInfo} transparent animationType="fade">
+        <View style={styles.modalOverlay}>
+          <View style={styles.customModalCard}>
+            <View style={[styles.modalIconWrap, { backgroundColor: '#fef3c7' }]}>
+              <FontAwesome6 name="map-location-dot" size={24} color="#d97706" />
+            </View>
+            <Text style={styles.modalTitle}>Aviso de Visitante</Text>
+            <Text style={styles.modalText}>
+              Você está fisicamente em <Text style={{ fontFamily: 'texgyB' }}>{formatCityForDisplay(visitorModalInfo?.physicalCity || '')}</Text>, e tentando criar um relato em <Text style={{ fontFamily: 'texgyB' }}>{formatCityForDisplay(visitorModalInfo?.clickedCity || '')}</Text>. Seu relato será marcado com uma legenda de visitante.
+            </Text>
+            <View style={styles.modalBtnRow}>
+              <TouchableOpacity style={styles.modalCancelBtn} onPress={() => setVisitorModalInfo(null)}>
+                <Text style={styles.modalCancelText}>Cancelar</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.modalConfirmBtn} onPress={() => {
+                setVisitorModalInfo(null);
+                openAddRelatoModal();
+              }}>
+                <Text style={styles.modalConfirmText}>Prosseguir</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* NO LOCATION WARNING MODAL */}
+      <Modal visible={noLocationModalVisible} transparent animationType="fade">
+        <View style={styles.modalOverlay}>
+          <View style={styles.customModalCard}>
+            <View style={[styles.modalIconWrap, { backgroundColor: '#e0e7ff' }]}>
+              <FontAwesome6 name="location-crosshairs" size={24} color="#4f46e5" />
+            </View>
+            <Text style={styles.modalTitle}>Localização Padrão</Text>
+            <Text style={styles.modalText}>
+              Por não selecionar um local no mapa, seu relato será associado a sua localização atual: <Text style={{ fontFamily: 'texgyB' }}>{formatCityForDisplay(userCity || 'São Paulo')}</Text>.
+            </Text>
+            <View style={styles.modalBtnRow}>
+              <TouchableOpacity style={styles.modalCancelBtn} onPress={() => setNoLocationModalVisible(false)}>
+                <Text style={styles.modalCancelText}>Cancelar</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.modalConfirmBtn} onPress={() => {
+                setNoLocationModalVisible(false);
+                openAddRelatoModal();
+              }}>
+                <Text style={styles.modalConfirmText}>Prosseguir</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
       <AddRelatoModal
         visible={isAddModalVisible}
         onClose={() => {
           setIsAddModalVisible(false);
           setSelectedPoint(null);
+          setSelectedCityName(null);
+          setActiveDraftText(null);
+          setActiveDraftCrime(null);
+          setActiveDraftId(undefined);
         }}
         initialLocation={selectedPoint}
+        initialCityName={selectedCityName}
+        draftData={(activeDraftText || activeDraftCrime) ? { texto: activeDraftText || '', crimeKey: activeDraftCrime } : undefined}
+        draftId={activeDraftId}
+        onChangeLocation={(text, crimeKey) => {
+          setActiveDraftText(text);
+          setActiveDraftCrime(crimeKey);
+          setIsAddModalVisible(false);
+          setCreatingStep('picking');
+          setUiMode('creating_relato');
+          setIsCreatingVigia(true);
+        }}
       />
     </View>
   );
@@ -974,6 +1126,79 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 15,
     fontFamily: 'texgyB',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  customModalCard: {
+    backgroundColor: '#fff',
+    borderRadius: 24,
+    padding: 24,
+    width: '100%',
+    maxWidth: 340,
+    alignItems: 'center',
+    elevation: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+  },
+  modalIconWrap: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  modalTitle: {
+    fontFamily: 'texgyB',
+    fontSize: 20,
+    color: '#0f172a',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  modalText: {
+    fontFamily: 'texgyR',
+    fontSize: 14,
+    color: '#475569',
+    textAlign: 'center',
+    marginBottom: 24,
+    lineHeight: 20,
+  },
+  modalBtnRow: {
+    flexDirection: 'row',
+    width: '100%',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  modalCancelBtn: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 12,
+    backgroundColor: '#f1f5f9',
+    alignItems: 'center',
+  },
+  modalCancelText: {
+    fontFamily: 'texgyB',
+    color: '#64748b',
+    fontSize: 14,
+  },
+  modalConfirmBtn: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 12,
+    backgroundColor: '#2563eb',
+    alignItems: 'center',
+  },
+  modalConfirmText: {
+    fontFamily: 'texgyB',
+    color: '#ffffff',
+    fontSize: 14,
   },
 });
 

@@ -178,15 +178,10 @@ export default function RelatoItem({ relato, currentDeviceId, index = 0, showCit
         <View style={styles.postHeader}>
           <View style={{ flexDirection: 'row', alignItems: 'center', zIndex: 50, flexWrap: 'wrap', flex: 1, paddingRight: 8 }}>
             <Text style={styles.postDate}>{dateStr}</Text>
-            
-            {isOwner && showOwnerBadge && (
-              <View style={[styles.ownerBadge, { marginLeft: 8 }]}>
-                <Text style={styles.ownerBadgeText}>Feito por mim</Text>
-              </View>
-            )}
 
-            {relato.isVisitor && (
-              <View style={{ position: 'relative' }}>
+            {/* Visitante no listagem normal (showCityHeader = false) */}
+            {relato.isVisitor && !showCityHeader && (
+              <View style={{ position: 'relative', marginLeft: 8 }}>
                 <TouchableOpacity 
                   activeOpacity={0.7}
                   style={styles.visitorBadge}
@@ -218,6 +213,38 @@ export default function RelatoItem({ relato, currentDeviceId, index = 0, showCit
           </View>
 
           <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+            {/* Visitante no "Meus relatos" (showCityHeader = true) */}
+            {relato.isVisitor && showCityHeader && (
+              <View style={{ position: 'relative', marginRight: 8 }}>
+                <TouchableOpacity 
+                  activeOpacity={0.7}
+                  style={styles.visitorBadge}
+                  onPress={() => setShowTooltip(!showTooltip)}
+                >
+                  <View style={styles.visitorIconWrapper}>
+                    <FontAwesome6 name="location-dot" size={10} color="#000" />
+                    <FontAwesome6 name="xmark" size={8} color="#000" style={styles.visitorIconCross} />
+                  </View>
+                  <Text style={styles.visitorBadgeText}>Visitante</Text>
+                </TouchableOpacity>
+
+                {showTooltip && (
+                  <Animated.View 
+                    entering={FadeInUp.duration(200)} 
+                    exiting={FadeOut.duration(200)} 
+                    style={[styles.visitorTooltip, { right: 0, left: 'auto' }]}
+                  >
+                    <Text style={styles.visitorTooltipText}>
+                    {isOwner 
+                      ? "Você publicou este relato para uma cidade onde não estava fisicamente presente no momento da criação."
+                      : "Este relato foi criado por um usuário que estava fisicamente fora desta cidade no momento da publicação."}
+                  </Text>
+                    <View style={styles.visitorTooltipArrow} />
+                  </Animated.View>
+                )}
+              </View>
+            )}
+
             {showCityHeader && relato.cidade && (
               <View style={styles.cityHeaderInsideContainer}>
                 <FontAwesome6 name="location-dot" size={10} color="#6b7280" />
@@ -225,25 +252,26 @@ export default function RelatoItem({ relato, currentDeviceId, index = 0, showCit
               </View>
             )}
             
-            <TouchableOpacity 
-              style={[
-                styles.topMapButton, 
-                !(relato.latitude && relato.longitude) && styles.topMapButtonDisabled,
-                showCityHeader && relato.cidade ? { marginLeft: 8 } : {}
-              ]}
-              disabled={!(relato.latitude && relato.longitude)}
-              onPress={() => onViewOnMap?.(relato)}
-              activeOpacity={0.8}
-            >
-              <FontAwesome6 
-                name={relato.latitude && relato.longitude ? "map-location-dot" : "location-crosshairs"} 
-                size={12} 
-                color={relato.latitude && relato.longitude ? "#2563eb" : "#9ca3af"} 
-              />
-              <Text style={[styles.topMapButtonText, !(relato.latitude && relato.longitude) && styles.topMapButtonTextDisabled]}>
-                {relato.latitude && relato.longitude ? "Ver no mapa" : "Sem local"}
-              </Text>
-            </TouchableOpacity>
+            {!showCityHeader && onViewOnMap && (
+              <TouchableOpacity 
+                style={[
+                  styles.topMapButton, 
+                  !(relato.latitude && relato.longitude) && styles.topMapButtonDisabled,
+                ]}
+                disabled={!(relato.latitude && relato.longitude)}
+                onPress={() => onViewOnMap?.(relato)}
+                activeOpacity={0.8}
+              >
+                <FontAwesome6 
+                  name={relato.latitude && relato.longitude ? "map-location-dot" : "location-crosshairs"} 
+                  size={12} 
+                  color={relato.latitude && relato.longitude ? "#2563eb" : "#9ca3af"} 
+                />
+                <Text style={[styles.topMapButtonText, !(relato.latitude && relato.longitude) && styles.topMapButtonTextDisabled]}>
+                  {relato.latitude && relato.longitude ? "Ver no mapa" : "Sem local"}
+                </Text>
+              </TouchableOpacity>
+            )}
           </View>
         </View>
 
@@ -287,37 +315,67 @@ export default function RelatoItem({ relato, currentDeviceId, index = 0, showCit
             </TouchableOpacity>
           </View>
 
-          <View style={styles.actionContainer}>
-            {isOwner ? (
-              <TouchableOpacity 
-                style={[styles.actionButton, { backgroundColor: '#fef2f2' }]} 
-                activeOpacity={0.7}
-                onPress={handleDelete}
-              >
-                <FontAwesome6 name="trash-can" size={14} color="#dc2626" />
-              </TouchableOpacity>
-            ) : (
-              <>
-                <TouchableOpacity 
-                  style={[styles.actionButton, bookmarked && styles.actionButtonActiveBlack]} 
-                  activeOpacity={0.7}
-                  onPress={handleBookmarkToggle}
-                  disabled={isBookmarking}
-                >
-                  <FontAwesome6 name="bookmark" size={14} color={bookmarked ? "#000000" : "#6b7280"} solid={bookmarked} />
-                </TouchableOpacity>
-                
-                <View style={styles.actionDivider} />
-                
-                <TouchableOpacity 
-                  style={[styles.actionButton, flagged && styles.actionButtonActiveRed]} 
-                  activeOpacity={0.7}
-                  onPress={() => setFlagged(!flagged)}
-                >
-                  <FontAwesome6 name="flag" size={14} color={flagged ? "#dc2626" : "#6b7280"} solid={flagged} />
-                </TouchableOpacity>
-              </>
+          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+            {isOwner && showOwnerBadge && (
+              <View style={[styles.ownerBadge, { marginRight: 8 }]}>
+                <Text style={styles.ownerBadgeText}>Feito por mim</Text>
+              </View>
             )}
+            
+            {showCityHeader && onViewOnMap && (
+              <TouchableOpacity 
+                style={[
+                  styles.topMapButton, 
+                  !(relato.latitude && relato.longitude) && styles.topMapButtonDisabled,
+                  { marginRight: 8 }
+                ]}
+                disabled={!(relato.latitude && relato.longitude)}
+                onPress={() => onViewOnMap?.(relato)}
+                activeOpacity={0.8}
+              >
+                <FontAwesome6 
+                  name={relato.latitude && relato.longitude ? "map-location-dot" : "location-crosshairs"} 
+                  size={12} 
+                  color={relato.latitude && relato.longitude ? "#2563eb" : "#9ca3af"} 
+                />
+                <Text style={[styles.topMapButtonText, !(relato.latitude && relato.longitude) && styles.topMapButtonTextDisabled]}>
+                  {relato.latitude && relato.longitude ? "Ver no mapa" : "Sem local"}
+                </Text>
+              </TouchableOpacity>
+            )}
+
+            <View style={styles.actionContainer}>
+              {isOwner ? (
+                <TouchableOpacity 
+                  style={[styles.actionButton, { backgroundColor: '#fef2f2' }]} 
+                  activeOpacity={0.7}
+                  onPress={handleDelete}
+                >
+                  <FontAwesome6 name="trash-can" size={14} color="#dc2626" />
+                </TouchableOpacity>
+              ) : (
+                <>
+                  <TouchableOpacity 
+                    style={[styles.actionButton, bookmarked && styles.actionButtonActiveBlack]} 
+                    activeOpacity={0.7}
+                    onPress={handleBookmarkToggle}
+                    disabled={isBookmarking}
+                  >
+                    <FontAwesome6 name="bookmark" size={14} color={bookmarked ? "#000000" : "#6b7280"} solid={bookmarked} />
+                  </TouchableOpacity>
+                  
+                  <View style={styles.actionDivider} />
+                  
+                  <TouchableOpacity 
+                    style={[styles.actionButton, flagged && styles.actionButtonActiveRed]} 
+                    activeOpacity={0.7}
+                    onPress={() => setFlagged(!flagged)}
+                  >
+                    <FontAwesome6 name="flag" size={14} color={flagged ? "#dc2626" : "#6b7280"} solid={flagged} />
+                  </TouchableOpacity>
+                </>
+              )}
+            </View>
           </View>
         </View>
       </View>

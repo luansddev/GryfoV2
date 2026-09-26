@@ -26,9 +26,15 @@ interface AddRelatoModalProps {
   draftData?: { texto: string; crimeKey: string | null };
   draftId?: string;
   initialLocation?: { latitude: number; longitude: number } | null;
+  initialCityName?: string | null;
+  onChangeLocation?: (texto: string, crimeKey: string | null) => void;
 }
 
-export default function AddRelatoModal({ visible, onClose, draftData, draftId, initialLocation }: AddRelatoModalProps) {
+const formatCityForDisplay = (city: string) => {
+  return city.replace(/\bS\./i, 'São ').toLowerCase().split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+};
+
+export default function AddRelatoModal({ visible, onClose, draftData, draftId, initialLocation, initialCityName, onChangeLocation }: AddRelatoModalProps) {
   const [text, setText] = useState(draftData?.texto || '');
   const [selectedCrime, setSelectedCrime] = useState<string | null>(draftData?.crimeKey || null);
   const [isSelectingCrime, setIsSelectingCrime] = useState(false);
@@ -36,7 +42,10 @@ export default function AddRelatoModal({ visible, onClose, draftData, draftId, i
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { searchMode, searchedCity, userCity } = useSearchLocation();
 
-  const isVisitor = normalizarCidade((searchMode && searchedCity) ? searchedCity : (userCity || 'São Paulo')) !== normalizarCidade(userCity || 'São Paulo');
+  // "isVisitor" is visual inside the modal, based on initialCityName if provided, else user location context
+  const targetCityNormalized = normalizarCidade(initialCityName || userCity || 'São Paulo');
+  const userCityNormalized = normalizarCidade(userCity || 'São Paulo');
+  const isVisitor = targetCityNormalized !== userCityNormalized;
 
   useEffect(() => {
     if (visible) {
@@ -66,8 +75,7 @@ export default function AddRelatoModal({ visible, onClose, draftData, draftId, i
 
     setIsSubmitting(true);
     try {
-      const rawCity = (searchMode && searchedCity) ? searchedCity : (userCity || 'São Paulo');
-      const city = normalizarCidade(rawCity);
+      const city = targetCityNormalized;
       const ownerId = auth.currentUser?.uid || await getDeviceId();
 
       if (draftId) {
@@ -103,10 +111,8 @@ export default function AddRelatoModal({ visible, onClose, draftData, draftId, i
     
     setIsSubmitting(true);
     try {
-      const rawCity = (searchMode && searchedCity) ? searchedCity : (userCity || 'São Paulo');
-      const city = normalizarCidade(rawCity);
+      const city = targetCityNormalized;
       const ownerId = auth.currentUser?.uid || await getDeviceId();
-      const isVisitor = city !== normalizarCidade(userCity || 'São Paulo');
       
       await addDoc(collection(db, 'relatos'), {
         cidade: city,
@@ -164,11 +170,15 @@ export default function AddRelatoModal({ visible, onClose, draftData, draftId, i
                         <FontAwesome6 name="trash" size={14} color="#dc2626" />
                         <Text style={styles.popoverTextRed}>Apagar</Text>
                       </TouchableOpacity>
-                      <View style={styles.popoverDivider} />
-                      <TouchableOpacity style={styles.popoverOption} onPress={handleDraft} disabled={isSubmitting}>
-                        <FontAwesome6 name="bookmark" size={14} color="#4b5563" />
-                        <Text style={styles.popoverText}>Salvar Rascunho</Text>
-                      </TouchableOpacity>
+                      {text.trim().length > 0 && (
+                        <>
+                          <View style={styles.popoverDivider} />
+                          <TouchableOpacity style={styles.popoverOption} onPress={handleDraft} disabled={isSubmitting}>
+                            <FontAwesome6 name="bookmark" size={14} color="#4b5563" />
+                            <Text style={styles.popoverText}>Salvar Rascunho</Text>
+                          </TouchableOpacity>
+                        </>
+                      )}
                     </View>
                   )}
                 </View>
@@ -221,6 +231,32 @@ export default function AddRelatoModal({ visible, onClose, draftData, draftId, i
                 /* Formulário Principal */
                 <View style={styles.formContainer}>
                   
+                  {/* Localização Info */}
+                  <View style={styles.locationContainer}>
+                    <View style={styles.locationInfo}>
+                      <FontAwesome6 name="location-dot" size={14} color="#64748b" />
+                      <Text style={styles.locationText} numberOfLines={1}>
+                        {initialCityName ? formatCityForDisplay(initialCityName) : 'Localização atual'}
+                      </Text>
+                      {isVisitor && (
+                        <View style={styles.visitorBadge}>
+                          <Text style={styles.visitorText}>Visitante</Text>
+                        </View>
+                      )}
+                    </View>
+                    <TouchableOpacity 
+                      style={styles.changeLocationBtn}
+                      onPress={() => {
+                        if (onChangeLocation) {
+                          onChangeLocation(text, selectedCrime);
+                        }
+                      }}
+                    >
+                      <FontAwesome6 name="map" size={12} color="#2563eb" />
+                      <Text style={styles.changeLocationText}>Alterar local</Text>
+                    </TouchableOpacity>
+                  </View>
+
                   {/* Selector de Crime */}
                   <Text style={styles.label}>Natureza do Crime</Text>
                   <TouchableOpacity 
@@ -552,5 +588,54 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: '#854d0e',
     lineHeight: 18,
+  },
+  locationContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#f8fafc',
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
+  locationInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  locationText: {
+    fontFamily: 'texgyB',
+    color: '#334155',
+    fontSize: 14,
+    marginLeft: 8,
+    marginRight: 8,
+    flexShrink: 1,
+  },
+  visitorBadge: {
+    backgroundColor: '#fef3c7',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  visitorText: {
+    fontFamily: 'texgyB',
+    color: '#d97706',
+    fontSize: 10,
+  },
+  changeLocationBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#eff6ff',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+  },
+  changeLocationText: {
+    fontFamily: 'texgyB',
+    color: '#2563eb',
+    fontSize: 12,
+    marginLeft: 4,
   },
 });

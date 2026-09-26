@@ -160,12 +160,26 @@ export function HomeContent() {
                    activeOpacity={0.8}
                    layout={LinearTransition.duration(250)}
                  >
+                   {/* Invisible placeholder to drive the capsule's layout size instantly */}
+                   <View style={{ opacity: 0 }} pointerEvents="none">
+                     {isActive ? (
+                       <Text style={[styles.capsuleText, styles.capsuleTextActive]}>
+                         {route.title}
+                       </Text>
+                     ) : (
+                       <FontAwesome6 name={route.icon} size={16} color="#666" />
+                     )}
+                   </View>
+
+                   {/* Absolute elements for smooth crossfade without layout interference */}
                    {isActive ? (
-                     <Animated.Text entering={FadeIn.duration(200)} exiting={FadeOut.duration(200)} style={[styles.capsuleText, styles.capsuleTextActive]}>
-                       {route.title}
-                     </Animated.Text>
+                     <Animated.View entering={FadeIn.duration(200)} exiting={FadeOut.duration(200)} style={[StyleSheet.absoluteFill, { alignItems: 'center', justifyContent: 'center' }]} pointerEvents="none">
+                       <Text style={[styles.capsuleText, styles.capsuleTextActive]}>
+                         {route.title}
+                       </Text>
+                     </Animated.View>
                    ) : (
-                     <Animated.View entering={FadeIn.duration(200)} exiting={FadeOut.duration(200)}>
+                     <Animated.View entering={FadeIn.duration(200)} exiting={FadeOut.duration(200)} style={[StyleSheet.absoluteFill, { alignItems: 'center', justifyContent: 'center' }]} pointerEvents="none">
                        <FontAwesome6 name={route.icon} size={16} color="#666" />
                      </Animated.View>
                    )}

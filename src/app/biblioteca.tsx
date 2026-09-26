@@ -10,7 +10,7 @@ import { useEffect } from 'react';
 import { ScrollView, ActivityIndicator } from 'react-native';
 import { db, auth } from '../config/firebaseConfig';
 import { onAuthStateChanged } from 'firebase/auth';
-import { collection, query, where, orderBy, onSnapshot } from 'firebase/firestore';
+import { collection, query, where, orderBy, onSnapshot, doc, updateDoc } from 'firebase/firestore';
 import { getDeviceId } from '../utils/device';
 import RelatoItem from '../components/RelatoItem';
 import RascunhoItem from '../components/RascunhoItem';
@@ -214,6 +214,15 @@ const Rascunhos = () => {
         onClose={handleCloseModal}
         draftData={editingDraft ? { texto: editingDraft.texto, crimeKey: editingDraft.crimeKey } : undefined}
         draftId={editingDraft?.id}
+        initialLocation={editingDraft?.latitude && editingDraft?.longitude ? { latitude: editingDraft.latitude, longitude: editingDraft.longitude } : undefined}
+        initialCityName={editingDraft?.cidade}
+        onChangeLocation={async (text, crimeKey) => {
+          if (editingDraft?.id) {
+            await updateDoc(doc(db, 'rascunhos', editingDraft.id), { texto: text, crimeKey });
+          }
+          handleCloseModal();
+          router.push({ pathname: '/(tabs)/relatos', params: { editDraftId: editingDraft?.id } });
+        }}
       />
     </View>
   );
@@ -382,12 +391,26 @@ export default function Biblioteca() {
                  activeOpacity={0.8}
                  layout={LinearTransition.duration(250)}
                >
+                 {/* Invisible placeholder to drive the capsule's layout size instantly */}
+                 <View style={{ opacity: 0 }} pointerEvents="none">
+                   {isActive ? (
+                     <Text style={[styles.capsuleText, styles.capsuleTextActive]}>
+                       {route.title}
+                     </Text>
+                   ) : (
+                     <FontAwesome6 name={route.icon} size={16} color="#666" />
+                   )}
+                 </View>
+
+                 {/* Absolute elements for smooth crossfade without layout interference */}
                  {isActive ? (
-                   <Animated.Text entering={FadeIn.duration(200)} exiting={FadeOut.duration(200)} style={[styles.capsuleText, styles.capsuleTextActive]}>
-                     {route.title}
-                   </Animated.Text>
+                   <Animated.View entering={FadeIn.duration(200)} exiting={FadeOut.duration(200)} style={[StyleSheet.absoluteFill, { alignItems: 'center', justifyContent: 'center' }]} pointerEvents="none">
+                     <Text style={[styles.capsuleText, styles.capsuleTextActive]}>
+                       {route.title}
+                     </Text>
+                   </Animated.View>
                  ) : (
-                   <Animated.View entering={FadeIn.duration(200)} exiting={FadeOut.duration(200)}>
+                   <Animated.View entering={FadeIn.duration(200)} exiting={FadeOut.duration(200)} style={[StyleSheet.absoluteFill, { alignItems: 'center', justifyContent: 'center' }]} pointerEvents="none">
                      <FontAwesome6 name={route.icon} size={16} color="#666" />
                    </Animated.View>
                  )}
