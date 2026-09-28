@@ -1,7 +1,8 @@
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Platform, Dimensions, Keyboard, KeyboardAvoidingView, TextInput, LayoutAnimation, ActivityIndicator } from 'react-native';
 import { FontAwesome6 } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import Supercluster from 'supercluster';
 import { Alert, RefreshControl, Modal } from 'react-native';
 import { Marker, Region, MapPressEvent } from 'react-native-maps';
 import Svg, { Path, Circle as SvgCircle } from 'react-native-svg';
@@ -15,6 +16,14 @@ const getRelatoColor = (natureza?: string) => {
   if (physicalCrimesKeys.includes(up)) return '#dc2626'; // Vermelho
   if (patrimonyCrimesKeys.includes(up)) return '#64748b'; // Cinza
   return '#64748b'; // fallback cinza
+};
+
+const getRelatoNature = (natureza?: string) => {
+  if (!natureza) return 'patrimony';
+  const up = natureza.toUpperCase();
+  if (lifeCrimesKeys.includes(up)) return 'life';
+  if (physicalCrimesKeys.includes(up)) return 'physical';
+  return 'patrimony';
 };
 import * as Location from 'expo-location';
 import AddRelatoModal from '../../components/AddRelatoModal';
@@ -39,6 +48,10 @@ export default function Relatos() {
   const router = useRouter();
   const params = useLocalSearchParams();
   const insets = useSafeAreaInsets();
+  const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
+  const [viewMode, setViewMode] = useState<'map' | 'list'>('map');
+  const { mapRef, region: sharedRegion, registerMapChildren, setMapPressHandler, setMapInteractionEnabled, userLocation: sharedUserLocation, activeTab, setIsCreatingRelato } = useSharedMap();
+  const [userLocation, setUserLocation] = useState<Location.LocationObject | null>(null);
   const [isAddModalVisible, setIsAddModalVisible] = useState(false);
   const [relatos, setRelatos] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -48,6 +61,7 @@ export default function Relatos() {
   const { setIsCreatingVigia } = useVigiaCreation();
   const [uiMode, setUiMode] = useState<'idle' | 'creating_relato'>('idle');
   const [selectedRelatoId, setSelectedRelatoId] = useState<string | null>(null);
+  const [selectedClusterLeaves, setSelectedClusterLeaves] = useState<any[] | null>(null);
   const [creatingStep, setCreatingStep] = useState<'picking' | 'configuring'>('picking');
   const [selectedPoint, setSelectedPoint] = useState<{ latitude: number; longitude: number } | null>(null);
   const [selectedAddress, setSelectedAddress] = useState<string | null>(null);
@@ -58,6 +72,77 @@ export default function Relatos() {
   const [activeDraftText, setActiveDraftText] = useState<string | null>(null);
   const [activeDraftCrime, setActiveDraftCrime] = useState<string | null>(null);
   const [activeDraftId, setActiveDraftId] = useState<string | undefined>(undefined);
+
+  const superclusterLife = useRef(new Supercluster({ radius: 70, maxZoom: 18, minPoints: 2 })).current;
+  const superclusterPhysical = useRef(new Supercluster({ radius: 70, maxZoom: 18, minPoints: 2 })).current;
+  const superclusterPatrimony = useRef(new Supercluster({ radius: 70, maxZoom: 18, minPoints: 2 })).current;
+
+  const { pointsLife, pointsPhysical, pointsPatrimony } = useMemo(() => {
+    const pLife: any[] = [];
+    const pPhys: any[] = [];
+    const pPatr: any[] = [];
+    
+    relatos.forEach(relato => {
+      if (relato.latitude && relato.longitude) {
+        const nature = getRelatoNature(relato.crimeKey);
+        const point = {
+          type: 'Feature',
+          properties: { cluster: false, relato, nature },
+          geometry: { type: 'Point', coordinates: [relato.longitude, relato.latitude] }
+        };
+        if (nature === 'life') pLife.push(point);
+        else if (nature === 'physical') pPhys.push(point);
+        else pPatr.push(point);
+      }
+    });
+    return { pointsLife: pLife, pointsPhysical: pPhys, pointsPatrimony: pPatr };
+  }, [relatos]);
+
+
+
+  const [visibleClusters, setVisibleClusters] = useState<any[]>([]);
+
+  const updateClusters = useCallback(() => {
+    if (!sharedRegion) return;
+
+    const factor = 1.2;
+    const halfLng = (sharedRegion.longitudeDelta / 2) * factor;
+    const halfLat = (sharedRegion.latitudeDelta / 2) * factor;
+
+    const bbox: [number, number, number, number] = [
+      sharedRegion.longitude - halfLng,
+      sharedRegion.latitude - halfLat,
+      sharedRegion.longitude + halfLng,
+      sharedRegion.latitude + halfLat
+    ];
+    
+    let zoom = Math.round(Math.log2(360 / sharedRegion.longitudeDelta));
+    zoom = Math.max(0, Math.min(18, zoom));
+    
+    if (sharedRegion.longitudeDelta <= 0) zoom = 18;
+
+    const clustersLife = superclusterLife.getClusters(bbox, zoom).map(c => ({...c, properties: {...c.properties, nature: 'life'}}));
+    const clustersPhys = superclusterPhysical.getClusters(bbox, zoom).map(c => ({...c, properties: {...c.properties, nature: 'physical'}}));
+    const clustersPatr = superclusterPatrimony.getClusters(bbox, zoom).map(c => ({...c, properties: {...c.properties, nature: 'patrimony'}}));
+
+    setVisibleClusters([...clustersLife, ...clustersPhys, ...clustersPatr]);
+  }, [sharedRegion, superclusterLife, superclusterPhysical, superclusterPatrimony]);
+
+  useEffect(() => {
+    superclusterLife.load(pointsLife);
+    superclusterPhysical.load(pointsPhysical);
+    superclusterPatrimony.load(pointsPatrimony);
+    updateClusters();
+  }, [pointsLife, pointsPhysical, pointsPatrimony, superclusterLife, superclusterPhysical, superclusterPatrimony, updateClusters]);
+
+  const handleClusterPress = useCallback((clusterId: number, latitude: number, longitude: number, nature: string) => {
+    let leaves: any[] = [];
+    if (nature === 'life') leaves = superclusterLife.getLeaves(clusterId, 50);
+    else if (nature === 'physical') leaves = superclusterPhysical.getLeaves(clusterId, 50);
+    else leaves = superclusterPatrimony.getLeaves(clusterId, 50);
+    
+    setSelectedClusterLeaves(leaves.map(l => l.properties.relato));
+  }, [superclusterLife, superclusterPhysical, superclusterPatrimony]);
 
   const openAddRelatoModal = () => {
     setUiMode('idle');
@@ -276,10 +361,7 @@ export default function Relatos() {
     }, 1000);
   };
 
-  const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
-  const [viewMode, setViewMode] = useState<'map' | 'list'>('map');
-  const { mapRef, region: sharedRegion, registerMapChildren, setMapPressHandler, setMapInteractionEnabled, userLocation: sharedUserLocation, activeTab, setIsCreatingRelato } = useSharedMap();
-  const [userLocation, setUserLocation] = useState<Location.LocationObject | null>(null);
+
 
   useEffect(() => {
     let isMounted = true;
@@ -325,9 +407,31 @@ export default function Relatos() {
   useEffect(() => {
     const markersToRender = (
       <>
-        {relatos.map(relato => {
-          if (!relato.latitude || !relato.longitude) return null;
-          const markerColor = getRelatoColor(relato.crimeKey);
+        {visibleClusters.map(c => {
+          const isCluster = c.properties?.cluster;
+          const nature = c.properties.nature;
+          const markerColor = nature === 'life' ? '#000000' : nature === 'physical' ? '#dc2626' : '#64748b';
+
+          if (isCluster) {
+            return (
+              <Marker
+                key={`cluster-${nature}-${c.id}`}
+                coordinate={{ latitude: c.geometry.coordinates[1], longitude: c.geometry.coordinates[0] }}
+                onPress={() => handleClusterPress(c.id as number, c.geometry.coordinates[1], c.geometry.coordinates[0], nature)}
+                style={{ zIndex: c.properties.point_count + 1 }}
+              >
+                <View style={styles.clusterContainer}>
+                  <View style={[styles.clusterHalo, { backgroundColor: markerColor }]} />
+                  <View style={[styles.clusterCircle, { backgroundColor: markerColor }]}>
+                    <Text style={styles.clusterText}>{c.properties.point_count}</Text>
+                  </View>
+                </View>
+              </Marker>
+            );
+          }
+
+          const relato = c.properties.relato;
+          if (!relato) return null;
           return (
             <Marker
               key={`marker-${relato.id}`}
@@ -350,7 +454,7 @@ export default function Relatos() {
                 </Svg>
               </View>
             </Marker>
-          )
+          );
         })}
         {uiMode === 'creating_relato' && searchedPoint && (
           <Marker coordinate={searchedPoint} anchor={{ x: 0.5, y: 1 }}>
@@ -385,7 +489,7 @@ export default function Relatos() {
       </>
     );
     registerMapChildren('relatos', markersToRender);
-  }, [relatos, uiMode, searchedPoint, selectedPoint, registerMapChildren]);
+  }, [visibleClusters, uiMode, searchedPoint, selectedPoint, registerMapChildren, handleClusterPress]);
 
   useEffect(() => {
     if (params.focusLat && params.focusLng) {
@@ -746,6 +850,34 @@ export default function Relatos() {
                 index={0}
                 showOwnerBadge={true}
               />
+            </View>
+          </View>
+        </View>
+      )}
+
+      {selectedClusterLeaves && selectedClusterLeaves.length > 0 && (
+        <View style={[StyleSheet.absoluteFill, { zIndex: 100 }]} pointerEvents="box-none">
+          <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 20 }}>
+            <View style={{ width: '100%', maxWidth: 400, maxHeight: '85%' }}>
+              <TouchableOpacity
+                style={{ alignSelf: 'center', marginBottom: 16, backgroundColor: '#fff', borderRadius: 20, width: 40, height: 40, justifyContent: 'center', alignItems: 'center', elevation: 4, shadowColor: '#000', shadowOffset: {width: 0, height: 2}, shadowOpacity: 0.25, shadowRadius: 3.84 }}
+                onPress={() => setSelectedClusterLeaves(null)}
+                activeOpacity={0.8}
+              >
+                <FontAwesome6 name="xmark" size={20} color="#333" />
+              </TouchableOpacity>
+              <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 20 }}>
+                {selectedClusterLeaves.map((relato, index) => (
+                  <View key={relato.id} style={{ marginBottom: 12 }}>
+                    <RelatoItem
+                      relato={relato}
+                      currentDeviceId={currentDeviceId}
+                      index={index}
+                      showOwnerBadge={true}
+                    />
+                  </View>
+                ))}
+              </ScrollView>
             </View>
           </View>
         </View>
@@ -1200,5 +1332,33 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontSize: 14,
   },
+  clusterContainer: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    width: 60,
+    height: 60,
+  },
+  clusterHalo: {
+    position: 'absolute',
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    opacity: 0.3,
+  },
+  clusterCircle: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: '#fff',
+    zIndex: 2,
+  },
+  clusterText: {
+    color: '#fff',
+    fontWeight: 'bold',
+    fontSize: 14,
+  }
 });
 
