@@ -107,7 +107,7 @@ export default function AddRelatoModal({ visible, onClose, draftData, draftId, i
   };
 
   const handleSubmit = async () => {
-    if (!selectedCrime || text.length < 5) return;
+    if (!selectedCrime || text.length < 70) return;
     
     setIsSubmitting(true);
     try {
@@ -146,7 +146,7 @@ export default function AddRelatoModal({ visible, onClose, draftData, draftId, i
           if (showOptions) setShowOptions(false);
         }}>
           <KeyboardAvoidingView 
-            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
             style={styles.container}
           >
             <View style={styles.card}>
@@ -230,32 +230,48 @@ export default function AddRelatoModal({ visible, onClose, draftData, draftId, i
               ) : (
                 /* Formulário Principal */
                 <View style={styles.formContainer}>
+                  <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 16 }}>
                   
                   {/* Localização Info */}
-                  <View style={styles.locationContainer}>
+                  <LinearGradient 
+                    colors={initialLocation ? ['#0f172a', '#1e293b'] : ['#f1f5f9', '#e2e8f0']} 
+                    start={{ x: 0, y: 0 }} 
+                    end={{ x: 1, y: 1 }} 
+                    style={styles.locationContainer}
+                  >
                     <View style={styles.locationInfo}>
-                      <FontAwesome6 name="location-dot" size={14} color="#64748b" />
-                      <Text style={styles.locationText} numberOfLines={1}>
-                        {initialCityName ? formatCityForDisplay(initialCityName) : 'Localização atual'}
-                      </Text>
-                      {isVisitor && (
+                      <View style={[styles.locationIconBg, !initialLocation && { backgroundColor: 'rgba(100, 116, 139, 0.15)' }]}>
+                        <FontAwesome6 name={initialLocation ? "location-dot" : "eye-slash"} size={14} color={initialLocation ? "#60a5fa" : "#64748b"} />
+                      </View>
+                      <View style={{ flex: 1, marginLeft: 10, marginRight: 8 }}>
+                        <Text style={[styles.locationText, !initialLocation && { color: '#334155' }, { marginLeft: 0, marginRight: 0 }]} numberOfLines={1}>
+                          {initialCityName ? formatCityForDisplay(initialCityName) : (userCity ? formatCityForDisplay(userCity) : 'Sua cidade')}
+                        </Text>
+                        {!initialLocation && (
+                          <Text style={{ fontFamily: 'texgyR', fontSize: 11, color: '#64748b', marginTop: 2 }}>
+                            Não será exibido no mapa
+                          </Text>
+                        )}
+                      </View>
+                      {isVisitor && initialLocation && (
                         <View style={styles.visitorBadge}>
                           <Text style={styles.visitorText}>Visitante</Text>
                         </View>
                       )}
                     </View>
                     <TouchableOpacity 
-                      style={styles.changeLocationBtn}
+                      style={[styles.changeLocationBtn, !initialLocation && { backgroundColor: '#cbd5e1' }]}
+                      activeOpacity={0.8}
                       onPress={() => {
                         if (onChangeLocation) {
                           onChangeLocation(text, selectedCrime);
                         }
                       }}
                     >
-                      <FontAwesome6 name="map" size={12} color="#2563eb" />
-                      <Text style={styles.changeLocationText}>Alterar local</Text>
+                      <FontAwesome6 name="map" size={12} color={initialLocation ? "#1e293b" : "#334155"} />
+                      <Text style={[styles.changeLocationText, !initialLocation && { color: '#334155' }]}>Alterar</Text>
                     </TouchableOpacity>
-                  </View>
+                  </LinearGradient>
 
                   {/* Selector de Crime */}
                   <Text style={styles.label}>Natureza do Crime</Text>
@@ -305,21 +321,25 @@ export default function AddRelatoModal({ visible, onClose, draftData, draftId, i
                     </View>
                   )}
 
+                  </ScrollView>
+
                   {/* Botão Enviar */}
                   <TouchableOpacity 
-                    style={styles.submitButtonWrapper}
+                    style={[styles.submitButtonWrapper, (!selectedCrime || text.length < 70 || isSubmitting) && styles.submitButtonWrapperDisabled]}
                     activeOpacity={0.8}
                     onPress={handleSubmit}
-                    disabled={!selectedCrime || text.length < 5 || isSubmitting}
+                    disabled={!selectedCrime || text.length < 70 || isSubmitting}
                   >
                     <LinearGradient
-                      colors={(!selectedCrime || text.length < 5 || isSubmitting) ? ['#d1d5db', '#9ca3af'] : ['#3b82f6', '#1d4ed8']}
+                      colors={(!selectedCrime || text.length < 70 || isSubmitting) ? ['#e5e7eb', '#d1d5db'] : ['#2563eb', '#1e40af']}
                       style={styles.submitButton}
                       start={{ x: 0, y: 0 }}
                       end={{ x: 1, y: 1 }}
                     >
-                      <Text style={styles.submitButtonText}>{isSubmitting ? 'Publicando...' : 'Publicar Relato'}</Text>
-                      {!isSubmitting && <FontAwesome6 name="paper-plane" size={14} color="#fff" style={{ marginLeft: 8 }} />}
+                      <Text style={[styles.submitButtonText, (!selectedCrime || text.length < 70 || isSubmitting) && { color: '#9ca3af' }]}>
+                        {isSubmitting ? 'Publicando...' : 'Publicar Relato'}
+                      </Text>
+                      {!isSubmitting && <FontAwesome6 name="comment-dots" size={16} color="#fff" style={{ marginLeft: 10 }} />}
                     </LinearGradient>
                   </TouchableOpacity>
                 </View>
@@ -336,10 +356,11 @@ export default function AddRelatoModal({ visible, onClose, draftData, draftId, i
 const styles = StyleSheet.create({
   blurContainer: {
     flex: 1,
-    justifyContent: 'center',
+    justifyContent: 'flex-start',
     alignItems: 'center',
     padding: 20,
-    backgroundColor: 'rgba(0,0,0,0.5)', // Escurece o fundo já que removemos o blur
+    paddingTop: 60,
+    backgroundColor: 'rgba(0,0,0,0.5)',
   },
   container: {
     width: '100%',
@@ -350,6 +371,7 @@ const styles = StyleSheet.create({
   card: {
     backgroundColor: '#ffffff',
     width: '100%',
+    maxHeight: '90%',
     borderRadius: 24,
     padding: 24,
     shadowColor: '#000',
@@ -366,8 +388,8 @@ const styles = StyleSheet.create({
     zIndex: 10,
   },
   title: {
+    fontFamily: 'texgyB',
     fontSize: 20,
-    fontWeight: '700',
     color: '#1f2937',
   },
   headerRight: {
@@ -408,23 +430,24 @@ const styles = StyleSheet.create({
     marginVertical: 4,
   },
   popoverText: {
+    fontFamily: 'texgyB',
     marginLeft: 10,
     fontSize: 14,
     color: '#4b5563',
-    fontWeight: '500',
   },
   popoverTextRed: {
+    fontFamily: 'texgyB',
     marginLeft: 10,
     fontSize: 14,
     color: '#dc2626',
-    fontWeight: '600',
   },
   formContainer: {
     width: '100%',
+    flexShrink: 1,
   },
   label: {
+    fontFamily: 'texgyB',
     fontSize: 14,
-    fontWeight: '600',
     color: '#4b5563',
     marginBottom: 8,
     marginTop: 4,
@@ -441,6 +464,7 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   crimeSelectorPlaceholder: {
+    fontFamily: 'texgyR',
     color: '#9ca3af',
     fontSize: 15,
   },
@@ -457,9 +481,9 @@ const styles = StyleSheet.create({
     marginRight: 10,
   },
   selectedCrimeText: {
+    fontFamily: 'texgyB',
     fontSize: 15,
     color: '#1f2937',
-    fontWeight: '600',
   },
   textInputContainer: {
     backgroundColor: '#f9fafb',
@@ -467,16 +491,18 @@ const styles = StyleSheet.create({
     borderColor: '#e5e7eb',
     borderRadius: 16,
     padding: 16,
-    height: 160,
+    height: 220,
     marginBottom: 24,
   },
   textInput: {
     flex: 1,
+    fontFamily: 'texgyR',
     fontSize: 15,
     color: '#1f2937',
     lineHeight: 22,
   },
   charCounter: {
+    fontFamily: 'texgyR',
     textAlign: 'right',
     fontSize: 12,
     color: '#9ca3af',
@@ -498,9 +524,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   submitButtonText: {
+    fontFamily: 'texgyB',
     color: '#fff',
     fontSize: 16,
-    fontWeight: '600',
+  },
+  submitButtonWrapperDisabled: {
+    shadowOpacity: 0,
+    elevation: 0,
   },
   
   // Selection View Styles
@@ -521,14 +551,14 @@ const styles = StyleSheet.create({
     marginRight: 12,
   },
   backText: {
+    fontFamily: 'texgyB',
     marginLeft: 6,
     fontSize: 14,
     color: '#4b5563',
-    fontWeight: '600',
   },
   selectionTitle: {
+    fontFamily: 'texgyB',
     fontSize: 16,
-    fontWeight: '600',
     color: '#1f2937',
   },
   crimeList: {
@@ -544,8 +574,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
   },
   natureTitle: {
+    fontFamily: 'texgyB',
     fontSize: 14,
-    fontWeight: '700',
     marginLeft: 8,
     textTransform: 'uppercase',
   },
@@ -564,13 +594,12 @@ const styles = StyleSheet.create({
     borderColor: '#bfdbfe',
   },
   crimeItemText: {
+    fontFamily: 'texgyB',
     fontSize: 14,
     color: '#374151',
-    fontWeight: '500',
   },
   crimeItemTextSelected: {
     color: '#1d4ed8',
-    fontWeight: '600',
   },
   visitorWarning: {
     flexDirection: 'row',
@@ -583,6 +612,7 @@ const styles = StyleSheet.create({
     borderColor: '#fef08a',
   },
   visitorWarningText: {
+    fontFamily: 'texgyR',
     flex: 1,
     marginLeft: 10,
     fontSize: 13,
@@ -593,49 +623,61 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: '#f8fafc',
-    borderRadius: 12,
-    padding: 12,
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 24,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 10,
+    elevation: 6,
   },
   locationInfo: {
     flexDirection: 'row',
     alignItems: 'center',
     flex: 1,
   },
+  locationIconBg: {
+    width: 28,
+    height: 28,
+    borderRadius: 8,
+    backgroundColor: 'rgba(96, 165, 250, 0.15)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   locationText: {
     fontFamily: 'texgyB',
-    color: '#334155',
-    fontSize: 14,
-    marginLeft: 8,
+    color: '#f8fafc',
+    fontSize: 15,
+    marginLeft: 10,
     marginRight: 8,
     flexShrink: 1,
   },
   visitorBadge: {
-    backgroundColor: '#fef3c7',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
+    backgroundColor: 'rgba(253, 230, 138, 0.2)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: 'rgba(252, 211, 77, 0.3)',
   },
   visitorText: {
     fontFamily: 'texgyB',
-    color: '#d97706',
+    color: '#fcd34d',
     fontSize: 10,
   },
   changeLocationBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#eff6ff',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 8,
+    backgroundColor: '#f1f5f9',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 10,
   },
   changeLocationText: {
     fontFamily: 'texgyB',
-    color: '#2563eb',
+    color: '#0f172a',
     fontSize: 12,
-    marginLeft: 4,
+    marginLeft: 6,
   },
 });

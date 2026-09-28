@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useMemo, useCallback } from 'react';
 import {
   StyleSheet,
   View,
@@ -123,6 +123,58 @@ const categoryOptions = [
 ];
 
 
+/* ================= MARCADORES MEMOIZADOS ================= */
+
+const CrimeMarker = React.memo(({ feature, mapFilter }: { feature: any; mapFilter: string }) => {
+  const [longitude, latitude] = feature.geometry.coordinates;
+  const isLife = mapFilter === 'life';
+  const isPhysical = mapFilter === 'physical';
+  const bgColor = isLife ? '#000' : isPhysical ? '#FF0000' : '#666666';
+
+  return (
+    <Marker
+      coordinate={{ latitude, longitude }}
+      title={feature.properties.title}
+      anchor={{ x: 0.5, y: 0.5 }}
+      tracksViewChanges={false}
+    >
+      <View style={styles.diamondWrapper}>
+        <Svg width={26} height={26} viewBox="0 0 26 26">
+          <Path 
+            d="M13 3 L23 13 L13 23 L3 13 Z" 
+            fill={bgColor} 
+            stroke="#fff" 
+            strokeWidth={2} 
+            strokeLinejoin="round"
+          />
+        </Svg>
+      </View>
+    </Marker>
+  );
+});
+
+const ClusterMarker = React.memo(({ cluster, mapFilter, onPress }: { cluster: any; mapFilter: string; onPress: () => void }) => {
+  const [longitude, latitude] = cluster.geometry.coordinates;
+  const isLife = mapFilter === 'life';
+  const isPhysical = mapFilter === 'physical';
+  const bgColor = isLife ? '#000' : isPhysical ? '#FF0000' : '#666666';
+
+  return (
+    <Marker
+      coordinate={{ latitude, longitude }}
+      onPress={onPress}
+      style={{ zIndex: cluster.properties.point_count + 1 }}
+    >
+      <View style={styles.clusterContainer}>
+        <View style={[styles.clusterHalo, { backgroundColor: bgColor }]} />
+        <View style={[styles.clusterCircle, { backgroundColor: bgColor }]}>
+          <Text style={styles.clusterText}>{cluster.properties.point_count}</Text>
+        </View>
+      </View>
+    </Marker>
+  );
+});
+
 /* ================= COMPONENTE PRINCIPAL ================= */
 
 export default function Dados() {
@@ -173,14 +225,10 @@ export default function Dados() {
     longitudeDelta: 0.08,
   });
 
-  const [lifeClusters, setLifeClusters] = useState<any[]>([]);
-  const [physicalClusters, setPhysicalClusters] = useState<any[]>([]);
-  const [patrimonyClusters, setPatrimonyClusters] = useState<any[]>([]);
+  const [visibleClusters, setVisibleClusters] = useState<any[]>([]);
   const [cityName, setCityName] = useState<string>('Localizando...');
 
-  const lifeSupercluster = useRef(new Supercluster({ radius: 50, maxZoom: 16 })).current;
-  const physicalSupercluster = useRef(new Supercluster({ radius: 50, maxZoom: 16 })).current;
-  const patrimonySupercluster = useRef(new Supercluster({ radius: 50, maxZoom: 16 })).current;
+  const superclusterIndex = useRef(new Supercluster({ radius: 70, maxZoom: 18, minPoints: 2 })).current;
 
   /* ================= GEO + DADOS ================= */
 
@@ -319,150 +367,101 @@ export default function Dados() {
 
   /* ================= SUPERCLUSTER UPDATES ================= */
 
-  const updateClusters = (reg: Region, dados: any = dadosCidade) => {
-    if (!dados) return;
+  const points = useMemo(() => {
+    if (!dadosCidade) return [];
+
+    let keys: string[] = [];
+    if (mapFilter === 'life') keys = lifeCrimesKeys;
+    else if (mapFilter === 'physical') keys = physicalCrimesKeys;
+    else if (mapFilter === 'patrimony') keys = patrimonyCrimesKeys;
+
+    const newPoints: any[] = [];
+    keys.forEach(key => {
+      if (selectedSubFilters.length > 0 && !selectedSubFilters.includes(key)) return;
+      dadosCidade[key]?.localizacoes?.forEach((loc: any, idx: number) => {
+        if (Number.isFinite(loc.latitude) && Number.isFinite(loc.longitude) && Math.abs(loc.latitude) <= 90 && Math.abs(loc.longitude) <= 180) {
+          newPoints.push({
+            type: 'Feature',
+            properties: { id: `${mapFilter}-${key}-${idx}`, crime: key, title: formatCrimeName(key), cluster: false },
+            geometry: { type: 'Point', coordinates: [loc.longitude, loc.latitude] }
+          });
+        }
+      });
+    });
+    return newPoints;
+  }, [dadosCidade, mapFilter, selectedSubFilters]);
+
+  useEffect(() => {
+    superclusterIndex.load(points);
+  }, [points, superclusterIndex]);
+
+  const updateClusters = useCallback(() => {
+    if (!sharedRegion) return;
+
+    const factor = 1.2;
+    const halfLng = (sharedRegion.longitudeDelta / 2) * factor;
+    const halfLat = (sharedRegion.latitudeDelta / 2) * factor;
 
     const bbox: [number, number, number, number] = [
-      reg.longitude - reg.longitudeDelta,
-      reg.latitude - reg.latitudeDelta,
-      reg.longitude + reg.longitudeDelta,
-      reg.latitude + reg.latitudeDelta
+      sharedRegion.longitude - halfLng,
+      sharedRegion.latitude - halfLat,
+      sharedRegion.longitude + halfLng,
+      sharedRegion.latitude + halfLat
     ];
-    const zoom = Math.max(0, Math.min(20, Math.round(Math.log2(360 / reg.longitudeDelta))));
+    
+    let zoom = Math.round(Math.log2(360 / sharedRegion.longitudeDelta));
+    zoom = Math.max(0, Math.min(18, zoom));
+    
+    if (sharedRegion.longitudeDelta <= 0) zoom = 18;
 
-    setLifeClusters(lifeSupercluster.getClusters(bbox, zoom));
-    setPhysicalClusters(physicalSupercluster.getClusters(bbox, zoom));
-    setPatrimonyClusters(patrimonySupercluster.getClusters(bbox, zoom));
-  };
-
-  useEffect(() => {
-    if (dadosCidade) {
-      if (mapFilter === 'life') {
-        const lifePoints: any[] = [];
-        lifeCrimesKeys.forEach(key => {
-          if (selectedSubFilters.length > 0 && !selectedSubFilters.includes(key)) return;
-          dadosCidade[key]?.localizacoes?.forEach((loc: any, idx: number) => {
-            lifePoints.push({
-              type: 'Feature',
-              properties: { id: `life-${key}-${idx}`, crime: key, title: formatCrimeName(key), cluster: false },
-              geometry: { type: 'Point', coordinates: [loc.longitude, loc.latitude] }
-            });
-          });
-        });
-        lifeSupercluster.load(lifePoints);
-        physicalSupercluster.load([]);
-        patrimonySupercluster.load([]);
-      } else if (mapFilter === 'physical') {
-        const physicalPoints: any[] = [];
-        physicalCrimesKeys.forEach(key => {
-          if (selectedSubFilters.length > 0 && !selectedSubFilters.includes(key)) return;
-          dadosCidade[key]?.localizacoes?.forEach((loc: any, idx: number) => {
-            physicalPoints.push({
-              type: 'Feature',
-              properties: { id: `phys-${key}-${idx}`, crime: key, title: formatCrimeName(key), cluster: false },
-              geometry: { type: 'Point', coordinates: [loc.longitude, loc.latitude] }
-            });
-          });
-        });
-        physicalSupercluster.load(physicalPoints);
-        lifeSupercluster.load([]);
-        patrimonySupercluster.load([]);
-      } else if (mapFilter === 'patrimony') {
-        const patrimonyPoints: any[] = [];
-        patrimonyCrimesKeys.forEach(key => {
-          if (selectedSubFilters.length > 0 && !selectedSubFilters.includes(key)) return;
-          dadosCidade[key]?.localizacoes?.forEach((loc: any, idx: number) => {
-            patrimonyPoints.push({
-              type: 'Feature',
-              properties: { id: `patr-${key}-${idx}`, crime: key, title: formatCrimeName(key), cluster: false },
-              geometry: { type: 'Point', coordinates: [loc.longitude, loc.latitude] }
-            });
-          });
-        });
-        patrimonySupercluster.load(patrimonyPoints);
-        lifeSupercluster.load([]);
-        physicalSupercluster.load([]);
-      }
-
-      updateClusters(sharedRegion, dadosCidade);
-    }
-  }, [dadosCidade, selectedSubFilters, mapFilter, sharedRegion]);
+    setVisibleClusters(superclusterIndex.getClusters(bbox, zoom));
+  }, [sharedRegion, superclusterIndex]);
 
   useEffect(() => {
-    const markersToRender = (mapFilter === 'life' ? lifeClusters : mapFilter === 'physical' ? physicalClusters : patrimonyClusters).map(c => {
-      const [longitude, latitude] = c.geometry.coordinates;
+    updateClusters();
+  }, [updateClusters, points]);
+
+  const handleClusterPress = useCallback((clusterId: number, latitude: number, longitude: number) => {
+    const expansionZoom = superclusterIndex.getClusterExpansionZoom(clusterId);
+    const zoomDelta = 360 / Math.pow(2, expansionZoom);
+    mapRef.current?.animateToRegion({
+      latitude, longitude,
+      latitudeDelta: zoomDelta, longitudeDelta: zoomDelta
+    });
+  }, [superclusterIndex, mapRef]);
+
+  useEffect(() => {
+    const markersToRender = visibleClusters.map(c => {
       const isCluster = c.properties?.cluster;
-      const isLife = mapFilter === 'life';
-      const isPhysical = mapFilter === 'physical';
-      const bgColor = isLife ? '#000' : isPhysical ? '#FF0000' : '#666666';
-      const dotStyle = isLife ? styles.markerDiamond : isPhysical ? styles.markerRedDiamond : styles.markerGrayDiamond;
-      const supercluster = isLife ? lifeSupercluster : isPhysical ? physicalSupercluster : patrimonySupercluster;
-
+      
       if (isCluster) {
         return (
-          <Marker
-            key={`${mapFilter}-cluster-${c.id}`}
-            coordinate={{ latitude, longitude }}
-            onPress={() => {
-              const expansionZoom = supercluster.getClusterExpansionZoom(c.id as number);
-              const zoomDelta = 360 / Math.pow(2, expansionZoom);
-              mapRef.current?.animateToRegion({
-                latitude, longitude,
-                latitudeDelta: zoomDelta, longitudeDelta: zoomDelta
-              });
-            }}
-            style={{ zIndex: c.properties.point_count + 1 }}
-          >
-            <View style={styles.clusterContainer}>
-              <View style={[styles.clusterHalo, { backgroundColor: bgColor }]} />
-              <View style={[styles.clusterCircle, { backgroundColor: bgColor }]}>
-                <Text style={styles.clusterText}>{c.properties.point_count}</Text>
-              </View>
-            </View>
-          </Marker>
+          <ClusterMarker 
+            key={`${mapFilter}-cluster-${c.id}`} 
+            cluster={c} 
+            mapFilter={mapFilter} 
+            onPress={() => handleClusterPress(c.id as number, c.geometry.coordinates[1], c.geometry.coordinates[0])}
+          />
         );
       }
       return (
-        <Marker
-          key={c.properties.id || `${mapFilter}-${c.properties.crime}-${latitude}-${longitude}`}
-          coordinate={{ latitude, longitude }}
-          title={c.properties.title}
-          anchor={{ x: 0.5, y: 0.5 }}
-          tracksViewChanges={false}
-        >
-          <View style={styles.diamondWrapper}>
-            <Svg width={26} height={26} viewBox="0 0 26 26">
-              <Path 
-                d="M13 3 L23 13 L13 23 L3 13 Z" 
-                fill={bgColor} 
-                stroke="#fff" 
-                strokeWidth={2} 
-                strokeLinejoin="round"
-              />
-            </Svg>
-          </View>
-        </Marker>
+        <CrimeMarker 
+          key={c.properties.id || `${mapFilter}-${c.properties.crime}-${c.geometry.coordinates[1]}-${c.geometry.coordinates[0]}`} 
+          feature={c} 
+          mapFilter={mapFilter} 
+        />
       );
     });
     registerMapChildren('dados', <>{markersToRender}</>);
-  }, [lifeClusters, physicalClusters, patrimonyClusters, mapFilter, registerMapChildren, mapRef]);
+  }, [visibleClusters, mapFilter, registerMapChildren, handleClusterPress]);
 
   useEffect(() => {
     setSelectedSubFilters([]);
   }, [mapFilter]);
 
-  if (loading) {
-    return (
-      <View style={styles.centered}>
-        <ActivityIndicator size="large" />
-        <Text style={{ marginTop: 8, fontFamily: 'texgyR', color: '#555' }}>Carregando dados...</Text>
-      </View>
-    );
-  }
-
   /* ================= CALCULOS DAS ESTATÍSTICAS ================= */
 
-  const stats = (() => {
+  const stats = useMemo(() => {
     if (!dadosCidade) return { total: 0, top3: [], bottom3: [], chartData: [] };
 
     const counts: { name: string; count: number }[] = [];
@@ -492,9 +491,9 @@ export default function Dados() {
     }
 
     return { total, top3, bottom3, chartData };
-  })();
+  }, [dadosCidade]);
 
-  const lifeCrimesStats = (() => {
+  const lifeCrimesStats = useMemo(() => {
     if (!dadosCidade) return { data: [], total: 0 };
 
     const data: { name: string; count: number }[] = [];
@@ -509,9 +508,9 @@ export default function Dados() {
 
     data.sort((a, b) => b.count - a.count);
     return { data, total };
-  })();
+  }, [dadosCidade]);
 
-  const physicalCrimesStats = (() => {
+  const physicalCrimesStats = useMemo(() => {
     if (!dadosCidade) return { data: [], total: 0 };
 
     const dataMap: { [key: string]: number } = {};
@@ -531,9 +530,9 @@ export default function Dados() {
       .map(k => ({ name: k, count: dataMap[k] }))
       .sort((a, b) => b.count - a.count);
     return { data, total };
-  })();
+  }, [dadosCidade]);
 
-  const patrimonyCrimesStats = (() => {
+  const patrimonyCrimesStats = useMemo(() => {
     if (!dadosCidade) return { data: [], total: 0 };
 
     const dataMap: { [key: string]: number } = {};
@@ -553,7 +552,7 @@ export default function Dados() {
       .map(k => ({ name: k, count: dataMap[k] }))
       .sort((a, b) => b.count - a.count);
     return { data, total };
-  })();
+  }, [dadosCidade]);
 
   /* ================= COMPONENTES VISUAIS EM LARGURA TOTAL ================= */
 
@@ -744,6 +743,15 @@ export default function Dados() {
   };
 
   /* ================= RENDER ================= */
+
+  if (loading) {
+    return (
+      <View style={styles.centered}>
+        <ActivityIndicator size="large" />
+        <Text style={{ marginTop: 8, fontFamily: 'texgyR', color: '#555' }}>Carregando dados...</Text>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container} pointerEvents="box-none">
