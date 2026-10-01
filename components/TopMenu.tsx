@@ -191,17 +191,9 @@ export default function TopMenu({ renderTabBar }: { renderTabBar?: () => React.R
 
 const styles = StyleSheet.create({
   container: {
-    backgroundColor: '#f5f5f5',
     paddingTop: 16,
     paddingHorizontal: 16,
-    borderBottomLeftRadius: 30,
-    borderBottomRightRadius: 30,
     zIndex: 1000,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.15,
-    shadowRadius: 12,
-    elevation: 8,
   },
   topRow: {
     flexDirection: 'row',

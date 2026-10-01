@@ -126,31 +126,22 @@ const categoryOptions = [
 
 /* ================= MARCADORES MEMOIZADOS ================= */
 
+const CRIME_MARKER_IMAGES: Record<string, number> = {
+  life: require('../../../assets/markers/crime-life.png'),
+  physical: require('../../../assets/markers/crime-physical.png'),
+  patrimony: require('../../../assets/markers/crime-patrimony.png'),
+};
+
 const CrimeMarker = React.memo(({ feature, mapFilter }: { feature: any; mapFilter: string }) => {
   const [longitude, latitude] = feature.geometry.coordinates;
-  const isLife = mapFilter === 'life';
-  const isPhysical = mapFilter === 'physical';
-  const bgColor = isLife ? '#000' : isPhysical ? '#FF0000' : '#666666';
 
   return (
     <Marker
       coordinate={{ latitude, longitude }}
       title={feature.properties.title}
       anchor={{ x: 0.5, y: 0.5 }}
-      tracksViewChanges={false}
-    >
-      <View style={styles.diamondWrapper}>
-        <Svg width={26} height={26} viewBox="0 0 26 26">
-          <Path 
-            d="M13 3 L23 13 L13 23 L3 13 Z" 
-            fill={bgColor} 
-            stroke="#fff" 
-            strokeWidth={2} 
-            strokeLinejoin="round"
-          />
-        </Svg>
-      </View>
-    </Marker>
+      image={CRIME_MARKER_IMAGES[mapFilter]}
+    />
   );
 });
 
@@ -450,7 +441,7 @@ export default function Dados() {
       if (isCluster) {
         return (
           <ClusterMarker 
-            key={`${mapFilter}-cluster-${c.id}`} 
+            key={`dados-${mapFilter}-cluster-${c.id}`} 
             cluster={c} 
             mapFilter={mapFilter} 
             onPress={() => handleClusterPress(c.id as number, c.geometry.coordinates[1], c.geometry.coordinates[0])}
@@ -459,7 +450,7 @@ export default function Dados() {
       }
       return (
         <CrimeMarker 
-          key={c.properties.id || `${mapFilter}-${c.properties.crime}-${c.geometry.coordinates[1]}-${c.geometry.coordinates[0]}`} 
+          key={`dados-${mapFilter}-marker-${c.properties.id || `${c.properties.crime}-${c.geometry.coordinates[1]}-${c.geometry.coordinates[0]}`}`} 
           feature={c} 
           mapFilter={mapFilter} 
         />
@@ -760,23 +751,8 @@ export default function Dados() {
   if (loading) {
     return (
       <View style={styles.centered}>
-        <View style={{ 
-          backgroundColor: '#fff', 
-          padding: 32, 
-          borderRadius: 24, 
-          alignItems: 'center', 
-          shadowColor: '#000', 
-          shadowOffset: { width: 0, height: 10 }, 
-          shadowOpacity: 0.1, 
-          shadowRadius: 15, 
-          elevation: 5 
-        }}>
-          <Image 
-            source={require('../../../assets/images/vigilo.png')} 
-            style={{ width: 32, height: 32, marginBottom: 16, resizeMode: 'contain' }} 
-          />
-          <ActivityIndicator size="large" color="#3b82f6" />
-          <Text style={{ marginTop: 12, fontFamily: 'texgyR', color: '#64748b', fontSize: 16 }}>Carregando dados...</Text>
+        <View style={{ backgroundColor: '#fff', padding: 16, borderRadius: 50, elevation: 4, shadowColor: '#000', shadowOffset: {width: 0, height: 4}, shadowOpacity: 0.2, shadowRadius: 8 }}>
+            <ActivityIndicator size="large" color="#000" />
         </View>
       </View>
     );
@@ -1708,66 +1684,6 @@ const styles = StyleSheet.create({
   },
 
   /* ================= MAP CLUSTERS & PINS ================= */
-  diamondWrapper: {
-    width: 32,
-    height: 32,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  markerDiamond: {
-    width: 16,
-    height: 16,
-    borderRadius: 2.5,
-    backgroundColor: '#000',
-    borderWidth: 2,
-    borderColor: '#fff',
-    transform: [{ rotate: '45deg' }],
-  },
-  markerRedDiamond: {
-    width: 16,
-    height: 16,
-    borderRadius: 2.5,
-    backgroundColor: '#FF0000',
-    borderWidth: 2,
-    borderColor: '#fff',
-    transform: [{ rotate: '45deg' }],
-  },
-  markerGrayDiamond: {
-    width: 16,
-    height: 16,
-    borderRadius: 2.5,
-    backgroundColor: '#666666',
-    borderWidth: 2,
-    borderColor: '#fff',
-    transform: [{ rotate: '45deg' }],
-  },
-  markerDot: {
-    width: 16,
-    height: 16,
-    borderRadius: 2.5,
-    backgroundColor: '#000',
-    borderWidth: 2,
-    borderColor: '#fff',
-    transform: [{ rotate: '45deg' }],
-  },
-  markerRedDot: {
-    width: 16,
-    height: 16,
-    borderRadius: 2.5,
-    backgroundColor: '#FF0000',
-    borderWidth: 2,
-    borderColor: '#fff',
-    transform: [{ rotate: '45deg' }],
-  },
-  markerGrayDot: {
-    width: 16,
-    height: 16,
-    borderRadius: 2.5,
-    backgroundColor: '#666666',
-    borderWidth: 2,
-    borderColor: '#fff',
-    transform: [{ rotate: '45deg' }],
-  },
   clusterContainer: {
     justifyContent: 'center',
     alignItems: 'center',

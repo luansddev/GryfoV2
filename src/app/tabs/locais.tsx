@@ -156,7 +156,7 @@ export default function Locais() {
         {/* Vigias salvos — Círculos de raio */}
         {vigias.map(vigia => (
           <Circle
-            key={`circle-${vigia.id}`}
+            key={`locais-circle-${vigia.id}`}
             center={{ latitude: vigia.latitude, longitude: vigia.longitude }}
             radius={vigia.radius}
             fillColor="rgba(59, 130, 246, 0.12)"
@@ -168,7 +168,7 @@ export default function Locais() {
         {/* Vigias salvos — Marcadores */}
         {vigias.map(vigia => (
           <Marker
-            key={`marker-${vigia.id}`}
+            key={`locais-marker-${vigia.id}`}
             coordinate={{ latitude: vigia.latitude, longitude: vigia.longitude }}
             title={vigia.name}
             description={`Raio: ${formatRadius(vigia.radius)}`}
@@ -550,23 +550,8 @@ export default function Locais() {
   if (loading) {
     return (
       <View style={styles.centered}>
-        <View style={{ 
-          backgroundColor: '#fff', 
-          padding: 32, 
-          borderRadius: 24, 
-          alignItems: 'center', 
-          shadowColor: '#000', 
-          shadowOffset: { width: 0, height: 10 }, 
-          shadowOpacity: 0.1, 
-          shadowRadius: 15, 
-          elevation: 5 
-        }}>
-          <Image 
-            source={require('../../../assets/images/vigilo.png')} 
-            style={{ width: 32, height: 32, marginBottom: 16, resizeMode: 'contain' }} 
-          />
-          <ActivityIndicator size="large" color="#3b82f6" />
-          <Text style={{ marginTop: 12, fontFamily: 'texgyR', color: '#64748b', fontSize: 16 }}>Carregando mapa...</Text>
+        <View style={{ backgroundColor: '#fff', padding: 16, borderRadius: 50, elevation: 4, shadowColor: '#000', shadowOffset: {width: 0, height: 4}, shadowOpacity: 0.2, shadowRadius: 8 }}>
+            <ActivityIndicator size="large" color="#000" />
         </View>
       </View>
     );

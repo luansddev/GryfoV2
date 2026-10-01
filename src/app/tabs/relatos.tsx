@@ -470,7 +470,7 @@ export default function Relatos() {
           if (isCluster) {
             return (
               <RelatoClusterMarker
-                key={`cluster-${nature}-${c.id}`}
+                key={`relatos-cluster-${nature}-${c.id}`}
                 cluster={c}
                 nature={nature}
                 onPress={() => handleClusterPress(c.id as number, c.geometry.coordinates[1], c.geometry.coordinates[0], nature)}
@@ -482,7 +482,7 @@ export default function Relatos() {
           if (!relato) return null;
           return (
             <RelatoItemMarker
-              key={`marker-${relato.id}`}
+              key={`relatos-marker-${relato.id}`}
               relato={relato}
               uiMode={uiMode}
               markerColor={markerColor}
@@ -623,23 +623,8 @@ export default function Relatos() {
           >
             {loading ? (
               <View style={{ alignItems: 'center', marginTop: 80 }}>
-                <View style={{ 
-                  backgroundColor: '#fff', 
-                  padding: 32, 
-                  borderRadius: 24, 
-                  alignItems: 'center', 
-                  shadowColor: '#000', 
-                  shadowOffset: { width: 0, height: 10 }, 
-                  shadowOpacity: 0.1, 
-                  shadowRadius: 15, 
-                  elevation: 5 
-                }}>
-                  <Image 
-                    source={require('../../../assets/images/vigilo.png')} 
-                    style={{ width: 32, height: 32, marginBottom: 16, resizeMode: 'contain' }} 
-                  />
-                  <ActivityIndicator size="large" color="#3b82f6" />
-                  <Text style={{ marginTop: 12, fontFamily: 'texgyR', color: '#64748b', fontSize: 16 }}>Carregando relatos...</Text>
+                <View style={{ backgroundColor: '#fff', padding: 16, borderRadius: 50, elevation: 4, shadowColor: '#000', shadowOffset: {width: 0, height: 4}, shadowOpacity: 0.2, shadowRadius: 8 }}>
+                    <ActivityIndicator size="large" color="#000" />
                 </View>
               </View>
             ) : (searchMode && !searchedCity) ? (

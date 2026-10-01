@@ -20,7 +20,7 @@ const AnimatedTouchableOpacity = Animated.createAnimatedComponent(TouchableOpaci
 
 function Spacer() {
   const insets = useSafeAreaInsets();
-  return <View style={{ paddingTop: insets.top, backgroundColor: "#F5F5F5" }}></View>
+  return <View style={{ paddingTop: insets.top }}></View>
 }
 
 export function HomeContent() {
@@ -210,15 +210,14 @@ const styles = StyleSheet.create({
     zIndex: 10,
   },
   topSection: {
-    backgroundColor: 'transparent',
+    backgroundColor: '#f5f5f5',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 4,
-    borderBottomLeftRadius: 20,
-    borderBottomRightRadius: 20,
-    overflow: 'hidden',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 8,
+    borderBottomLeftRadius: 30,
+    borderBottomRightRadius: 30,
   },
   capsulesContainer: {
     flexDirection: 'row',
