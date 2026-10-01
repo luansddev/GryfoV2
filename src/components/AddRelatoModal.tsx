@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   Modal, 
   View, 
@@ -7,9 +7,12 @@ import {
   TouchableOpacity, 
   TextInput, 
   ScrollView,
-  KeyboardAvoidingView,
   Platform,
-  TouchableWithoutFeedback
+  TouchableWithoutFeedback,
+  Keyboard,
+  LayoutAnimation,
+  Dimensions,
+  KeyboardAvoidingView
 } from 'react-native';
 import { FontAwesome6 } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -34,13 +37,18 @@ const formatCityForDisplay = (city: string) => {
   return city.replace(/\bS\./i, 'São ').toLowerCase().split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
 };
 
+const SCREEN_HEIGHT = Dimensions.get('window').height;
+
 export default function AddRelatoModal({ visible, onClose, draftData, draftId, initialLocation, initialCityName, onChangeLocation }: AddRelatoModalProps) {
   const [text, setText] = useState(draftData?.texto || '');
   const [selectedCrime, setSelectedCrime] = useState<string | null>(draftData?.crimeKey || null);
   const [isSelectingCrime, setIsSelectingCrime] = useState(false);
   const [showOptions, setShowOptions] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
   const { searchMode, searchedCity, userCity } = useSearchLocation();
+  const textInputRef = useRef<TextInput>(null);
 
   // "isVisitor" is visual inside the modal, based on initialCityName if provided, else user location context
   const targetCityNormalized = normalizarCidade(initialCityName || userCity || 'São Paulo');
@@ -51,16 +59,43 @@ export default function AddRelatoModal({ visible, onClose, draftData, draftId, i
     if (visible) {
       setText(draftData?.texto || '');
       setSelectedCrime(draftData?.crimeKey || null);
+      setIsKeyboardVisible(false);
+      setKeyboardHeight(0);
     }
   }, [visible, draftData]);
 
+  // Keyboard listeners
+  useEffect(() => {
+    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+
+    const showSub = Keyboard.addListener(showEvent, (e) => {
+      LayoutAnimation.configureNext(LayoutAnimation.create(200, 'easeInEaseOut', 'opacity'));
+      setKeyboardHeight(e.endCoordinates.height);
+      setIsKeyboardVisible(true);
+    });
+
+    const hideSub = Keyboard.addListener(hideEvent, () => {
+      LayoutAnimation.configureNext(LayoutAnimation.create(200, 'easeInEaseOut', 'opacity'));
+      setIsKeyboardVisible(false);
+      setKeyboardHeight(0);
+    });
+
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
+
   const handleClose = () => {
+    Keyboard.dismiss();
     setShowOptions(false);
     setIsSelectingCrime(false);
     onClose();
   };
 
   const handleClear = () => {
+    Keyboard.dismiss();
     setText('');
     setSelectedCrime(null);
     setShowOptions(false);
@@ -109,6 +144,7 @@ export default function AddRelatoModal({ visible, onClose, draftData, draftId, i
   const handleSubmit = async () => {
     if (!selectedCrime || text.length < 70) return;
     
+    Keyboard.dismiss();
     setIsSubmitting(true);
     try {
       const city = targetCityNormalized;
@@ -139,29 +175,72 @@ export default function AddRelatoModal({ visible, onClose, draftData, draftId, i
     }
   };
 
+  const isDisabled = !selectedCrime || text.length < 70 || isSubmitting;
+
+  // Summary bar shown when keyboard is open (replaces the collapsed sections)
+  const renderCompactSummary = () => {
+    const crimeInfo = selectedCrime ? getCrimeIcon(selectedCrime) : null;
+    return (
+      <View style={styles.compactSummary}>
+        <View style={styles.compactSummaryItem}>
+          <FontAwesome6 name="location-dot" size={11} color="#64748b" />
+          <Text style={styles.compactSummaryText} numberOfLines={1}>
+            {initialCityName ? formatCityForDisplay(initialCityName) : (userCity ? formatCityForDisplay(userCity) : 'Sua cidade')}
+          </Text>
+        </View>
+        <View style={styles.compactDivider} />
+        <View style={styles.compactSummaryItem}>
+          {crimeInfo ? (
+            <>
+              <FontAwesome6 name={crimeInfo.icon as any} size={11} color={crimeInfo.color} />
+              <Text style={styles.compactSummaryText} numberOfLines={1}>{formatCrimeName(selectedCrime!)}</Text>
+            </>
+          ) : (
+            <Text style={[styles.compactSummaryText, { color: '#9ca3af' }]}>Sem natureza</Text>
+          )}
+        </View>
+      </View>
+    );
+  };
+
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={handleClose}>
-      <View style={styles.blurContainer}>
+      <View style={{ flex: 1 }}>
         <TouchableWithoutFeedback onPress={() => {
           if (showOptions) setShowOptions(false);
+          Keyboard.dismiss();
         }}>
-          <KeyboardAvoidingView 
-            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-            style={styles.container}
-          >
-            <View style={styles.card}>
+          <View style={[
+            styles.overlay,
+            isKeyboardVisible && { justifyContent: 'flex-start', padding: 12, paddingTop: 40, paddingBottom: keyboardHeight > 0 ? keyboardHeight + 10 : 10 }
+          ]}>
+            <View style={[
+              styles.card,
+              isKeyboardVisible && { flex: 1, maxHeight: undefined, padding: 16 }
+            ]}>
               
               {/* Header */}
               <View style={styles.header}>
-                <Text style={styles.title}>Novo Relato</Text>
+                <Text style={styles.title}>
+                  {isKeyboardVisible ? 'Relato' : 'Novo Relato'}
+                </Text>
                 
                 <View style={styles.headerRight}>
-                  <TouchableOpacity 
-                    style={styles.closeButton} 
-                    onPress={() => setShowOptions(!showOptions)}
-                  >
-                    <FontAwesome6 name="xmark" size={18} color="#4b5563" />
-                  </TouchableOpacity>
+                  {isKeyboardVisible ? (
+                    <TouchableOpacity 
+                      style={styles.doneButton}
+                      onPress={() => Keyboard.dismiss()}
+                    >
+                      <Text style={styles.doneButtonText}>OK</Text>
+                    </TouchableOpacity>
+                  ) : (
+                    <TouchableOpacity 
+                      style={styles.closeButton} 
+                      onPress={() => setShowOptions(!showOptions)}
+                    >
+                      <FontAwesome6 name="xmark" size={18} color="#4b5563" />
+                    </TouchableOpacity>
+                  )}
 
                   {/* Popover Options */}
                   {showOptions && (
@@ -185,7 +264,7 @@ export default function AddRelatoModal({ visible, onClose, draftData, draftId, i
               </View>
 
               {isSelectingCrime ? (
-                /* Seleção de Crime (Dropdown view) */
+                /* Seleção de Crime */
                 <View style={styles.crimeSelectionContainer}>
                   <View style={styles.selectionHeader}>
                     <TouchableOpacity onPress={() => setIsSelectingCrime(false)} style={styles.backButton}>
@@ -194,7 +273,7 @@ export default function AddRelatoModal({ visible, onClose, draftData, draftId, i
                     </TouchableOpacity>
                     <Text style={styles.selectionTitle}>Selecione a Natureza</Text>
                   </View>
-                  <ScrollView style={styles.crimeList} showsVerticalScrollIndicator={false}>
+                  <ScrollView showsVerticalScrollIndicator={false}>
                     {mapNatureOptions.map((nature) => (
                       <View key={nature.id} style={styles.natureGroup}>
                         <View style={styles.natureHeader}>
@@ -229,74 +308,86 @@ export default function AddRelatoModal({ visible, onClose, draftData, draftId, i
                 </View>
               ) : (
                 /* Formulário Principal */
-                <View style={styles.formContainer}>
-                  <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 16 }}>
+                <View style={[styles.formContainer, isKeyboardVisible && { flex: 1 }]}>
                   
-                  {/* Localização Info */}
-                  <LinearGradient 
-                    colors={initialLocation ? ['#0f172a', '#1e293b'] : ['#f1f5f9', '#e2e8f0']} 
-                    start={{ x: 0, y: 0 }} 
-                    end={{ x: 1, y: 1 }} 
-                    style={styles.locationContainer}
-                  >
-                    <View style={styles.locationInfo}>
-                      <View style={[styles.locationIconBg, !initialLocation && { backgroundColor: 'rgba(100, 116, 139, 0.15)' }]}>
-                        <FontAwesome6 name={initialLocation ? "location-dot" : "eye-slash"} size={14} color={initialLocation ? "#60a5fa" : "#64748b"} />
-                      </View>
-                      <View style={{ flex: 1, marginLeft: 10, marginRight: 8 }}>
-                        <Text style={[styles.locationText, !initialLocation && { color: '#334155' }, { marginLeft: 0, marginRight: 0 }]} numberOfLines={1}>
-                          {initialCityName ? formatCityForDisplay(initialCityName) : (userCity ? formatCityForDisplay(userCity) : 'Sua cidade')}
-                        </Text>
-                        {!initialLocation && (
-                          <Text style={{ fontFamily: 'texgyR', fontSize: 11, color: '#64748b', marginTop: 2 }}>
-                            Não será exibido no mapa
-                          </Text>
+                  {/* When keyboard is visible: show compact summary instead of full sections */}
+                  {isKeyboardVisible ? (
+                    renderCompactSummary()
+                  ) : (
+                    <>
+                      {/* Localização Info */}
+                      <LinearGradient 
+                        colors={initialLocation ? ['#0f172a', '#1e293b'] : ['#f1f5f9', '#e2e8f0']} 
+                        start={{ x: 0, y: 0 }} 
+                        end={{ x: 1, y: 1 }} 
+                        style={styles.locationContainer}
+                      >
+                        <View style={styles.locationInfo}>
+                          <View style={[styles.locationIconBg, !initialLocation && { backgroundColor: 'rgba(100, 116, 139, 0.15)' }]}>
+                            <FontAwesome6 name={initialLocation ? "location-dot" : "eye-slash"} size={14} color={initialLocation ? "#60a5fa" : "#64748b"} />
+                          </View>
+                          <View style={{ flex: 1, marginLeft: 10, marginRight: 8 }}>
+                            <Text style={[styles.locationText, !initialLocation && { color: '#334155' }, { marginLeft: 0, marginRight: 0 }]} numberOfLines={1}>
+                              {initialCityName ? formatCityForDisplay(initialCityName) : (userCity ? formatCityForDisplay(userCity) : 'Sua cidade')}
+                            </Text>
+                            {!initialLocation && (
+                              <Text style={{ fontFamily: 'texgyR', fontSize: 11, color: '#64748b', marginTop: 2 }}>
+                                Não será exibido no mapa
+                              </Text>
+                            )}
+                          </View>
+                          {isVisitor && initialLocation && (
+                            <View style={styles.visitorBadge}>
+                              <Text style={styles.visitorText}>Visitante</Text>
+                            </View>
+                          )}
+                        </View>
+                        <TouchableOpacity 
+                          style={[styles.changeLocationBtn, !initialLocation && { backgroundColor: '#cbd5e1' }]}
+                          activeOpacity={0.8}
+                          onPress={() => {
+                            if (onChangeLocation) {
+                              onChangeLocation(text, selectedCrime);
+                            }
+                          }}
+                        >
+                          <FontAwesome6 name="map" size={12} color={initialLocation ? "#1e293b" : "#334155"} />
+                          <Text style={[styles.changeLocationText, !initialLocation && { color: '#334155' }]}>Alterar</Text>
+                        </TouchableOpacity>
+                      </LinearGradient>
+
+                      {/* Selector de Crime */}
+                      <Text style={styles.label}>Natureza do Crime</Text>
+                      <TouchableOpacity 
+                        style={styles.crimeSelector} 
+                        activeOpacity={0.7}
+                        onPress={() => setIsSelectingCrime(true)}
+                      >
+                        {selectedCrime ? (
+                          <View style={styles.selectedCrimeContainer}>
+                            <View style={[styles.crimeIconWrapper, { backgroundColor: `${getCrimeIcon(selectedCrime).color}15` }]}>
+                              <FontAwesome6 name={getCrimeIcon(selectedCrime).icon as any} size={14} color={getCrimeIcon(selectedCrime).color} />
+                            </View>
+                            <Text style={styles.selectedCrimeText}>{formatCrimeName(selectedCrime)}</Text>
+                          </View>
+                        ) : (
+                          <Text style={styles.crimeSelectorPlaceholder}>Toque para selecionar...</Text>
                         )}
-                      </View>
-                      {isVisitor && initialLocation && (
-                        <View style={styles.visitorBadge}>
-                          <Text style={styles.visitorText}>Visitante</Text>
-                        </View>
-                      )}
-                    </View>
-                    <TouchableOpacity 
-                      style={[styles.changeLocationBtn, !initialLocation && { backgroundColor: '#cbd5e1' }]}
-                      activeOpacity={0.8}
-                      onPress={() => {
-                        if (onChangeLocation) {
-                          onChangeLocation(text, selectedCrime);
-                        }
-                      }}
-                    >
-                      <FontAwesome6 name="map" size={12} color={initialLocation ? "#1e293b" : "#334155"} />
-                      <Text style={[styles.changeLocationText, !initialLocation && { color: '#334155' }]}>Alterar</Text>
-                    </TouchableOpacity>
-                  </LinearGradient>
+                        <FontAwesome6 name="chevron-down" size={14} color="#9ca3af" />
+                      </TouchableOpacity>
 
-                  {/* Selector de Crime */}
-                  <Text style={styles.label}>Natureza do Crime</Text>
-                  <TouchableOpacity 
-                    style={styles.crimeSelector} 
-                    activeOpacity={0.7}
-                    onPress={() => setIsSelectingCrime(true)}
-                  >
-                    {selectedCrime ? (
-                      <View style={styles.selectedCrimeContainer}>
-                        <View style={[styles.crimeIconWrapper, { backgroundColor: `${getCrimeIcon(selectedCrime).color}15` }]}>
-                          <FontAwesome6 name={getCrimeIcon(selectedCrime).icon as any} size={14} color={getCrimeIcon(selectedCrime).color} />
-                        </View>
-                        <Text style={styles.selectedCrimeText}>{formatCrimeName(selectedCrime)}</Text>
-                      </View>
-                    ) : (
-                      <Text style={styles.crimeSelectorPlaceholder}>Toque para selecionar...</Text>
-                    )}
-                    <FontAwesome6 name="chevron-down" size={14} color="#9ca3af" />
-                  </TouchableOpacity>
+                      {/* Label do Relato */}
+                      <Text style={styles.label}>Relato</Text>
+                    </>
+                  )}
 
-                  {/* Área de Texto */}
-                  <Text style={styles.label}>Relato</Text>
-                  <View style={styles.textInputContainer}>
+                  {/* Área de Texto — always visible, expands when keyboard is open */}
+                  <View style={[
+                    styles.textInputContainer,
+                    isKeyboardVisible && styles.textInputExpanded
+                  ]}>
                     <TextInput
+                      ref={textInputRef}
                       style={styles.textInput}
                       placeholder="Descreva o que aconteceu ou o que você presenciou..."
                       placeholderTextColor="#9ca3af"
@@ -306,13 +397,23 @@ export default function AddRelatoModal({ visible, onClose, draftData, draftId, i
                       onChangeText={setText}
                       textAlignVertical="top"
                     />
-                    <Text style={styles.charCounter}>
-                      {text.length}/300
-                    </Text>
+                    <View style={styles.charCounterRow}>
+                      {text.length < 70 && (
+                        <Text style={styles.charHint}>
+                          Mínimo {70 - text.length} caracteres
+                        </Text>
+                      )}
+                      <Text style={[
+                        styles.charCounter,
+                        text.length >= 70 && { color: '#10b981' }
+                      ]}>
+                        {text.length}/300
+                      </Text>
+                    </View>
                   </View>
 
-                  {/* Aviso de Visitante */}
-                  {isVisitor && (
+                  {/* Aviso de Visitante — only when keyboard is hidden */}
+                  {!isKeyboardVisible && isVisitor && (
                     <View style={styles.visitorWarning}>
                       <FontAwesome6 name="circle-info" size={14} color="#ca8a04" />
                       <Text style={styles.visitorWarningText}>
@@ -321,32 +422,39 @@ export default function AddRelatoModal({ visible, onClose, draftData, draftId, i
                     </View>
                   )}
 
-                  </ScrollView>
-
-                  {/* Botão Enviar */}
-                  <TouchableOpacity 
-                    style={[styles.submitButtonWrapper, (!selectedCrime || text.length < 70 || isSubmitting) && styles.submitButtonWrapperDisabled]}
-                    activeOpacity={0.8}
-                    onPress={handleSubmit}
-                    disabled={!selectedCrime || text.length < 70 || isSubmitting}
-                  >
-                    <LinearGradient
-                      colors={(!selectedCrime || text.length < 70 || isSubmitting) ? ['#e5e7eb', '#d1d5db'] : ['#2563eb', '#1e40af']}
-                      style={styles.submitButton}
-                      start={{ x: 0, y: 0 }}
-                      end={{ x: 1, y: 1 }}
+                  {/* Botão Enviar — only when keyboard is hidden */}
+                  {!isKeyboardVisible && (
+                    <TouchableOpacity 
+                      style={[styles.submitButtonWrapper, isDisabled && styles.submitButtonWrapperDisabled]}
+                      activeOpacity={0.8}
+                      onPress={handleSubmit}
+                      disabled={isDisabled}
                     >
-                      <Text style={[styles.submitButtonText, (!selectedCrime || text.length < 70 || isSubmitting) && { color: '#9ca3af' }]}>
-                        {isSubmitting ? 'Publicando...' : 'Publicar Relato'}
-                      </Text>
-                      {!isSubmitting && <FontAwesome6 name="comment-dots" size={16} color="#fff" style={{ marginLeft: 10 }} />}
-                    </LinearGradient>
-                  </TouchableOpacity>
+                      <LinearGradient
+                        colors={isDisabled ? ['#e5e7eb', '#d1d5db'] : ['#2563eb', '#1e40af']}
+                        style={styles.submitButton}
+                        start={{ x: 0, y: 0 }}
+                        end={{ x: 1, y: 1 }}
+                      >
+                        <Text style={[styles.submitButtonText, isDisabled && { color: '#9ca3af' }]}>
+                          {isSubmitting ? 'Publicando...' : 'Publicar Relato'}
+                        </Text>
+                        {!isSubmitting && (
+                          <FontAwesome6 
+                            name="comment-dots" 
+                            size={16} 
+                            color={isDisabled ? '#9ca3af' : '#fff'} 
+                            style={{ marginLeft: 10 }} 
+                          />
+                        )}
+                      </LinearGradient>
+                    </TouchableOpacity>
+                  )}
                 </View>
               )}
 
             </View>
-          </KeyboardAvoidingView>
+          </View>
         </TouchableWithoutFeedback>
       </View>
     </Modal>
@@ -354,37 +462,34 @@ export default function AddRelatoModal({ visible, onClose, draftData, draftId, i
 }
 
 const styles = StyleSheet.create({
-  blurContainer: {
+  overlay: {
     flex: 1,
-    justifyContent: 'flex-start',
-    alignItems: 'center',
-    padding: 20,
-    paddingTop: 60,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-  },
-  container: {
-    width: '100%',
-    maxWidth: 500,
-    alignItems: 'center',
     justifyContent: 'center',
+    alignItems: 'center',
+    padding: 16,
+    backgroundColor: 'rgba(0,0,0,0.5)',
   },
   card: {
     backgroundColor: '#ffffff',
     width: '100%',
-    maxHeight: '90%',
+    maxWidth: 500,
+    maxHeight: SCREEN_HEIGHT * 0.85,
     borderRadius: 24,
-    padding: 24,
+    padding: 20,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 10 },
     shadowOpacity: 0.15,
     shadowRadius: 20,
     elevation: 10,
   },
+  cardExpanded: {
+    maxHeight: SCREEN_HEIGHT * 0.5,
+  },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 20,
+    marginBottom: 16,
     zIndex: 10,
   },
   title: {
@@ -402,6 +507,17 @@ const styles = StyleSheet.create({
     backgroundColor: '#f3f4f6',
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  doneButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 12,
+    backgroundColor: '#2563eb',
+  },
+  doneButtonText: {
+    fontFamily: 'texgyB',
+    fontSize: 14,
+    color: '#fff',
   },
   popover: {
     position: 'absolute',
@@ -441,9 +557,41 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#dc2626',
   },
+
+  // Compact summary (shown when keyboard is open)
+  compactSummary: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f8fafc',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
+  compactSummaryItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    gap: 6,
+  },
+  compactSummaryText: {
+    fontFamily: 'texgyR',
+    fontSize: 12,
+    color: '#475569',
+    flex: 1,
+  },
+  compactDivider: {
+    width: 1,
+    height: 16,
+    backgroundColor: '#cbd5e1',
+    marginHorizontal: 10,
+  },
+
+  // Form
   formContainer: {
-    width: '100%',
-    flexShrink: 1,
+    // flex: 1 removed so it takes natural height
   },
   label: {
     fontFamily: 'texgyB',
@@ -461,7 +609,7 @@ const styles = StyleSheet.create({
     borderColor: '#e5e7eb',
     borderRadius: 16,
     padding: 16,
-    marginBottom: 20,
+    marginBottom: 16,
   },
   crimeSelectorPlaceholder: {
     fontFamily: 'texgyR',
@@ -485,14 +633,22 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: '#1f2937',
   },
+
+  // Text input
   textInputContainer: {
     backgroundColor: '#f9fafb',
     borderWidth: 1,
     borderColor: '#e5e7eb',
     borderRadius: 16,
     padding: 16,
-    height: 220,
-    marginBottom: 24,
+    minHeight: 120,
+    flexShrink: 1,
+    marginBottom: 16,
+  },
+  textInputExpanded: {
+    flex: 1,
+    height: undefined,
+    marginBottom: 0,
   },
   textInput: {
     flex: 1,
@@ -501,13 +657,25 @@ const styles = StyleSheet.create({
     color: '#1f2937',
     lineHeight: 22,
   },
+  charCounterRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 6,
+  },
+  charHint: {
+    fontFamily: 'texgyR',
+    fontSize: 11,
+    color: '#d97706',
+  },
   charCounter: {
     fontFamily: 'texgyR',
-    textAlign: 'right',
     fontSize: 12,
     color: '#9ca3af',
-    marginTop: 8,
+    marginLeft: 'auto',
   },
+
+  // Submit
   submitButtonWrapper: {
     borderRadius: 16,
     shadowColor: '#2563eb',
@@ -533,9 +701,9 @@ const styles = StyleSheet.create({
     elevation: 0,
   },
   
-  // Selection View Styles
+  // Crime Selection
   crimeSelectionContainer: {
-    height: 340,
+    maxHeight: SCREEN_HEIGHT * 0.55,
   },
   selectionHeader: {
     flexDirection: 'row',
@@ -560,9 +728,6 @@ const styles = StyleSheet.create({
     fontFamily: 'texgyB',
     fontSize: 16,
     color: '#1f2937',
-  },
-  crimeList: {
-    flex: 1,
   },
   natureGroup: {
     marginBottom: 20,
@@ -601,6 +766,8 @@ const styles = StyleSheet.create({
   crimeItemTextSelected: {
     color: '#1d4ed8',
   },
+
+  // Visitor
   visitorWarning: {
     flexDirection: 'row',
     backgroundColor: '#fefce8',
@@ -619,13 +786,15 @@ const styles = StyleSheet.create({
     color: '#854d0e',
     lineHeight: 18,
   },
+
+  // Location
   locationContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     borderRadius: 16,
     padding: 16,
-    marginBottom: 24,
+    marginBottom: 16,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.15,

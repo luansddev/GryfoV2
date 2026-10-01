@@ -1,9 +1,9 @@
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Platform, Dimensions, Keyboard, KeyboardAvoidingView, TextInput, LayoutAnimation, ActivityIndicator } from 'react-native';
 import { FontAwesome6 } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import Supercluster from 'supercluster';
-import { Alert, RefreshControl, Modal } from 'react-native';
+import { Alert, RefreshControl, Modal, Image } from 'react-native';
 import { Marker, Region, MapPressEvent } from 'react-native-maps';
 import Svg, { Path, Circle as SvgCircle } from 'react-native-svg';
 import { lifeCrimesKeys, physicalCrimesKeys, patrimonyCrimesKeys } from '../../constants/CrimeData';
@@ -42,7 +42,62 @@ import { useVigiaCreation } from '../../context/VigiaCreationContext';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useSharedMap } from '../../context/SharedMapContext';
 
+const RelatoClusterMarker = React.memo(({ cluster, nature, onPress }: { cluster: any; nature: string; onPress: () => void }) => {
+  const [tracksViewChanges, setTracksViewChanges] = useState(true);
+  const markerColor = nature === 'life' ? '#000000' : nature === 'physical' ? '#dc2626' : '#64748b';
 
+  useEffect(() => {
+    if (tracksViewChanges) {
+      const timer = setTimeout(() => {
+        setTracksViewChanges(false);
+      }, 500);
+      return () => clearTimeout(timer);
+    }
+  }, [tracksViewChanges]);
+
+  return (
+    <Marker
+      coordinate={{ latitude: cluster.geometry.coordinates[1], longitude: cluster.geometry.coordinates[0] }}
+      onPress={onPress}
+      style={{ zIndex: cluster.properties.point_count + 1 }}
+      tracksViewChanges={tracksViewChanges}
+    >
+      <View style={styles.clusterContainer}>
+        <View style={[styles.clusterHalo, { backgroundColor: markerColor }]} />
+        <View style={[styles.clusterCircle, { backgroundColor: markerColor }]}>
+          <Text style={styles.clusterText}>{cluster.properties.point_count}</Text>
+        </View>
+      </View>
+    </Marker>
+  );
+});
+
+const RelatoItemMarker = React.memo(({ relato, uiMode, onSelect, markerColor }: { relato: any; uiMode: string; onSelect: () => void; markerColor: string }) => {
+  return (
+    <Marker
+      coordinate={{ latitude: relato.latitude, longitude: relato.longitude }}
+      anchor={{ x: 0.5, y: 1 }}
+      onPress={() => {
+        if (uiMode !== 'creating_relato') {
+          onSelect();
+        }
+      }}
+      tracksViewChanges={false}
+    >
+      <View style={{ alignItems: 'center', justifyContent: 'center', width: 44, height: 44 }}>
+        <Svg width={36} height={36} viewBox="-2 -2 28 28">
+          <Path
+            d="M2 4c0-1.1.9-2 2-2h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2h-6l-2 6-2-6H4c-1.1 0-2-.9-2-2V4z"
+            fill={markerColor}
+            stroke="#ffffff"
+            strokeWidth={2}
+            strokeLinejoin="round"
+          />
+        </Svg>
+      </View>
+    </Marker>
+  );
+});
 
 export default function Relatos() {
   const router = useRouter();
@@ -414,46 +469,25 @@ export default function Relatos() {
 
           if (isCluster) {
             return (
-              <Marker
+              <RelatoClusterMarker
                 key={`cluster-${nature}-${c.id}`}
-                coordinate={{ latitude: c.geometry.coordinates[1], longitude: c.geometry.coordinates[0] }}
+                cluster={c}
+                nature={nature}
                 onPress={() => handleClusterPress(c.id as number, c.geometry.coordinates[1], c.geometry.coordinates[0], nature)}
-                style={{ zIndex: c.properties.point_count + 1 }}
-              >
-                <View style={styles.clusterContainer}>
-                  <View style={[styles.clusterHalo, { backgroundColor: markerColor }]} />
-                  <View style={[styles.clusterCircle, { backgroundColor: markerColor }]}>
-                    <Text style={styles.clusterText}>{c.properties.point_count}</Text>
-                  </View>
-                </View>
-              </Marker>
+              />
             );
           }
 
           const relato = c.properties.relato;
           if (!relato) return null;
           return (
-            <Marker
+            <RelatoItemMarker
               key={`marker-${relato.id}`}
-              coordinate={{ latitude: relato.latitude, longitude: relato.longitude }}
-              anchor={{ x: 0.5, y: 1 }}
-              onPress={() => {
-                if (uiMode !== 'creating_relato') {
-                  setSelectedRelatoId(relato.id);
-                }
-              }}
-            >
-              <View style={{ alignItems: 'center', justifyContent: 'center', width: 40, height: 40 }}>
-                <Svg width={32} height={32} viewBox="0 0 24 24">
-                  <Path
-                    d="M2 4c0-1.1.9-2 2-2h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2h-6l-2 6-2-6H4c-1.1 0-2-.9-2-2V4z"
-                    fill={markerColor}
-                    stroke="#ffffff"
-                    strokeWidth={1.5}
-                  />
-                </Svg>
-              </View>
-            </Marker>
+              relato={relato}
+              uiMode={uiMode}
+              markerColor={markerColor}
+              onSelect={() => setSelectedRelatoId(relato.id)}
+            />
           );
         })}
         {uiMode === 'creating_relato' && searchedPoint && (
@@ -588,7 +622,26 @@ export default function Relatos() {
             }
           >
             {loading ? (
-              <ActivityIndicator size="large" color="#3b82f6" style={{ marginTop: 40 }} />
+              <View style={{ alignItems: 'center', marginTop: 80 }}>
+                <View style={{ 
+                  backgroundColor: '#fff', 
+                  padding: 32, 
+                  borderRadius: 24, 
+                  alignItems: 'center', 
+                  shadowColor: '#000', 
+                  shadowOffset: { width: 0, height: 10 }, 
+                  shadowOpacity: 0.1, 
+                  shadowRadius: 15, 
+                  elevation: 5 
+                }}>
+                  <Image 
+                    source={require('../../../assets/images/vigilo.png')} 
+                    style={{ width: 32, height: 32, marginBottom: 16, resizeMode: 'contain' }} 
+                  />
+                  <ActivityIndicator size="large" color="#3b82f6" />
+                  <Text style={{ marginTop: 12, fontFamily: 'texgyR', color: '#64748b', fontSize: 16 }}>Carregando relatos...</Text>
+                </View>
+              </View>
             ) : (searchMode && !searchedCity) ? (
               <View style={{ alignItems: 'center', marginTop: 80 }}>
                 <FontAwesome6 name="magnifying-glass-location" size={48} color="#cbd5e1" />

@@ -9,6 +9,7 @@ import {
   Dimensions,
   LayoutAnimation,
   Modal,
+  Image,
 } from 'react-native';
 
 import { Marker, Region } from 'react-native-maps';
@@ -159,11 +160,23 @@ const ClusterMarker = React.memo(({ cluster, mapFilter, onPress }: { cluster: an
   const isPhysical = mapFilter === 'physical';
   const bgColor = isLife ? '#000' : isPhysical ? '#FF0000' : '#666666';
 
+  const [tracksViewChanges, setTracksViewChanges] = useState(true);
+
+  useEffect(() => {
+    if (tracksViewChanges) {
+      const timer = setTimeout(() => {
+        setTracksViewChanges(false);
+      }, 500);
+      return () => clearTimeout(timer);
+    }
+  }, [tracksViewChanges]);
+
   return (
     <Marker
       coordinate={{ latitude, longitude }}
       onPress={onPress}
       style={{ zIndex: cluster.properties.point_count + 1 }}
+      tracksViewChanges={tracksViewChanges}
     >
       <View style={styles.clusterContainer}>
         <View style={[styles.clusterHalo, { backgroundColor: bgColor }]} />
@@ -747,8 +760,24 @@ export default function Dados() {
   if (loading) {
     return (
       <View style={styles.centered}>
-        <ActivityIndicator size="large" />
-        <Text style={{ marginTop: 8, fontFamily: 'texgyR', color: '#555' }}>Carregando dados...</Text>
+        <View style={{ 
+          backgroundColor: '#fff', 
+          padding: 32, 
+          borderRadius: 24, 
+          alignItems: 'center', 
+          shadowColor: '#000', 
+          shadowOffset: { width: 0, height: 10 }, 
+          shadowOpacity: 0.1, 
+          shadowRadius: 15, 
+          elevation: 5 
+        }}>
+          <Image 
+            source={require('../../../assets/images/vigilo.png')} 
+            style={{ width: 32, height: 32, marginBottom: 16, resizeMode: 'contain' }} 
+          />
+          <ActivityIndicator size="large" color="#3b82f6" />
+          <Text style={{ marginTop: 12, fontFamily: 'texgyR', color: '#64748b', fontSize: 16 }}>Carregando dados...</Text>
+        </View>
       </View>
     );
   }

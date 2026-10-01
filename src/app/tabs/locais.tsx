@@ -15,6 +15,7 @@ import {
   Platform,
   FlatList,
   Modal,
+  Image,
 } from 'react-native';
 
 import { Marker, Circle, Region, MapPressEvent } from 'react-native-maps';
@@ -549,8 +550,24 @@ export default function Locais() {
   if (loading) {
     return (
       <View style={styles.centered}>
-        <ActivityIndicator size="large" />
-        <Text style={{ marginTop: 8, fontFamily: 'texgyR', color: '#555' }}>Carregando mapa...</Text>
+        <View style={{ 
+          backgroundColor: '#fff', 
+          padding: 32, 
+          borderRadius: 24, 
+          alignItems: 'center', 
+          shadowColor: '#000', 
+          shadowOffset: { width: 0, height: 10 }, 
+          shadowOpacity: 0.1, 
+          shadowRadius: 15, 
+          elevation: 5 
+        }}>
+          <Image 
+            source={require('../../../assets/images/vigilo.png')} 
+            style={{ width: 32, height: 32, marginBottom: 16, resizeMode: 'contain' }} 
+          />
+          <ActivityIndicator size="large" color="#3b82f6" />
+          <Text style={{ marginTop: 12, fontFamily: 'texgyR', color: '#64748b', fontSize: 16 }}>Carregando mapa...</Text>
+        </View>
       </View>
     );
   }
