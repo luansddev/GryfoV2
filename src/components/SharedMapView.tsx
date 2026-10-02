@@ -41,7 +41,7 @@ export default function SharedMapView() {
         zoomEnabled={mapInteractionEnabled}
         pitchEnabled={mapInteractionEnabled}
         rotateEnabled={mapInteractionEnabled}
-        minZoomLevel={13}
+        minZoomLevel={14}
         mapPadding={{ top: 0, right: 0, bottom: 0, left: 0 }}
       >
         {/* Marcador Customizado da Localização do Usuário */}

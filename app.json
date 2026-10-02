@@ -4,7 +4,7 @@
     "slug": "Gryfo",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/icon.png",
+    "icon": "./assets/images/gardio-icon.png",
     "scheme": "gryfo",
     "userInterfaceStyle": "automatic",
     "ios": {
@@ -13,7 +13,7 @@
     "android": {
       "package": "br.gryfo.corp",
       "adaptiveIcon": {
-        "foregroundImage": "./assets/images/adaptive-icon.png",
+        "foregroundImage": "./assets/images/gardio-icon.png",
         "backgroundColor": "#000000"
       }
     },

@@ -140,18 +140,21 @@ const CrimeMarker = React.memo(({ feature, mapFilter }: { feature: any; mapFilte
       coordinate={{ latitude, longitude }}
       title={feature.properties.title}
       anchor={{ x: 0.5, y: 0.5 }}
-      image={CRIME_MARKER_IMAGES[mapFilter]}
-    />
+    >
+      <Image
+        source={CRIME_MARKER_IMAGES[mapFilter]}
+        style={{ width: 24, height: 24 }}
+      />
+    </Marker>
   );
 });
 
 const ClusterMarker = React.memo(({ cluster, mapFilter, onPress }: { cluster: any; mapFilter: string; onPress: () => void }) => {
   const [longitude, latitude] = cluster.geometry.coordinates;
+  const [tracksViewChanges, setTracksViewChanges] = useState(true);
   const isLife = mapFilter === 'life';
   const isPhysical = mapFilter === 'physical';
-  const bgColor = isLife ? '#000' : isPhysical ? '#FF0000' : '#666666';
-
-  const [tracksViewChanges, setTracksViewChanges] = useState(true);
+  const bgColor = isLife ? '#000000' : isPhysical ? '#dc2626' : '#64748b';
 
   useEffect(() => {
     if (tracksViewChanges) {
@@ -230,6 +233,7 @@ export default function Dados() {
   });
 
   const [visibleClusters, setVisibleClusters] = useState<any[]>([]);
+  const [markersVisible, setMarkersVisible] = useState(true);
   const [cityName, setCityName] = useState<string>('Localizando...');
 
   const superclusterIndex = useRef(new Supercluster({ radius: 70, maxZoom: 18, minPoints: 2 })).current;
@@ -435,6 +439,11 @@ export default function Dados() {
   }, [superclusterIndex, mapRef]);
 
   useEffect(() => {
+    if (!markersVisible) {
+      registerMapChildren('dados', <></>);
+      return;
+    }
+
     const markersToRender = visibleClusters.map(c => {
       const isCluster = c.properties?.cluster;
       
@@ -457,11 +466,29 @@ export default function Dados() {
       );
     });
     registerMapChildren('dados', <>{markersToRender}</>);
-  }, [visibleClusters, mapFilter, registerMapChildren, handleClusterPress]);
+  }, [visibleClusters, mapFilter, registerMapChildren, handleClusterPress, markersVisible]);
 
+  // Hide markers and clear the map as soon as the filter changes
   useEffect(() => {
     setSelectedSubFilters([]);
+    setMarkersVisible(false);
+    // Clear clusters and map children instantly
+    setVisibleClusters([]);
+    registerMapChildren('dados', <></>);
+    // Reset supercluster points to avoid leftover markers from previous filter
+    superclusterIndex.load([]);
   }, [mapFilter]);
+
+  // Once the new clusters are ready, make the markers visible again
+  // Once the new clusters are ready, make the markers visible again after a short delay
+  useEffect(() => {
+    if (!markersVisible && visibleClusters.length > 0) {
+      const timer = setTimeout(() => {
+        setMarkersVisible(true);
+      }, 300); // increased delay for smoother transition
+      return () => clearTimeout(timer);
+    }
+  }, [visibleClusters, markersVisible]);
 
   /* ================= CALCULOS DAS ESTATÍSTICAS ================= */
 
@@ -2188,4 +2215,5 @@ const styles = StyleSheet.create({
     fontFamily: 'GlacialR',
     color: '#94a3b8',
   },
+
 });
