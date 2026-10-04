@@ -35,7 +35,13 @@
           "backgroundColor": "#000000"
         }
       ],
-      "expo-status-bar"
+      "expo-status-bar",
+      [
+        "expo-notifications",
+        {
+          "color": "#1d4ed8"
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import {
   StyleSheet,
   View,
@@ -28,20 +28,12 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useVigiaCreation } from '../../context/VigiaCreationContext';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useSharedMap } from '../../context/SharedMapContext';
+import { useVigias, Vigia } from '../../context/VigiasContext';
+import { getCrimeIcon, formatCrimeName } from '../../constants/CrimeData';
 
 /* ================= TYPES ================= */
 
-interface Vigia {
-  id: string;
-  name: string;
-  latitude: number;
-  longitude: number;
-  radius: number; // em metros
-  createdAt: number;
-  address?: string;
-}
-
-const STORAGE_KEY = '@gryfo_vigias';
+// O tipo `Vigia` e a persistência agora vivem em VigiasContext (compartilhados com o monitor de relatos)
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 const RADIUS_MIN = 100;
@@ -56,8 +48,23 @@ export default function Locais() {
   const [userLocation, setUserLocation] = useState<Location.LocationObject | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // Lista de vigias salvos
-  const [vigias, setVigias] = useState<Vigia[]>([]);
+  // Lista de vigias salvos (compartilhada via contexto)
+  const { vigias, vigiasLoaded, saveVigias, notifications } = useVigias();
+
+  // Quantidade de alertas (total / não lidos) gerados por cada vigia
+  const alertsByVigia = useMemo(() => {
+    const map: Record<string, { total: number; unread: number }> = {};
+    notifications.forEach(n => {
+      if (n.type === 'vigia_relato' && n.vigiaIds) {
+        n.vigiaIds.forEach(id => {
+          if (!map[id]) map[id] = { total: 0, unread: 0 };
+          map[id].total += 1;
+          if (!n.read) map[id].unread += 1;
+        });
+      }
+    });
+    return map;
+  }, [notifications]);
 
   // Estado da UI: 'idle' = mapa normal, 'creating' = modo criação, 'listing' = painel aberto
   const [uiMode, setUiMode] = useState<'idle' | 'creating' | 'listing'>('idle');
@@ -95,7 +102,7 @@ export default function Locais() {
     }
   }, [tracksViewChanges, vigias]);
 
-  const { mapRef, region: sharedRegion, registerMapChildren, setMapPressHandler, setMapInteractionEnabled, userLocation: sharedUserLocation } = useSharedMap();
+  const { mapRef, region: sharedRegion, registerMapChildren, setMapPressHandler, setMapInteractionEnabled, userLocation: sharedUserLocation, activeTab } = useSharedMap();
 
   // Animated panel
   const translateY = useSharedValue(SCREEN_HEIGHT);
@@ -143,27 +150,60 @@ export default function Locais() {
       }
     })();
 
-    // Carregar vigias salvos
-    loadVigias();
-
     return () => { isMounted = false; };
   }, []);
 
+  // Se algum vigia não tiver endereço (ex: criado anteriormente), busca em background
+  const addressBackfillDone = useRef(false);
+  useEffect(() => {
+    if (!vigiasLoaded || addressBackfillDone.current) return;
+    addressBackfillDone.current = true;
+    if (!vigias.some(v => !v.address)) return;
+
+    Promise.all(
+      vigias.map(async v => {
+        if (v.address) return v;
+        const addr = await fetchAddress(v.latitude, v.longitude);
+        return { ...v, address: addr };
+      })
+    ).then(updated => saveVigias(updated)).catch(() => { });
+  }, [vigiasLoaded]);
+
 
   useEffect(() => {
-    const markersToRender = (
+    const isLocaisActive = activeTab === 2;
+
+    const persistentCircles = (
       <>
         {/* Vigias salvos — Círculos de raio */}
         {vigias.map(vigia => (
           <Circle
             key={`locais-circle-${vigia.id}`}
             center={{ latitude: vigia.latitude, longitude: vigia.longitude }}
-            radius={vigia.radius}
-            fillColor="rgba(59, 130, 246, 0.12)"
-            strokeColor="rgba(59, 130, 246, 0.45)"
-            strokeWidth={2}
+            radius={isLocaisActive ? vigia.radius : 0}
+            fillColor={isLocaisActive ? "rgba(59, 130, 246, 0.12)" : "transparent"}
+            strokeColor={isLocaisActive ? "rgba(59, 130, 246, 0.45)" : "transparent"}
+            strokeWidth={isLocaisActive ? 2 : 0}
           />
         ))}
+
+        {/* Ponto selecionado durante criação — Círculo preview */}
+        {uiMode === 'creating' && selectedPoint && (
+          <Circle
+            center={selectedPoint}
+            radius={isLocaisActive ? vigiaRadius : 0}
+            fillColor={isLocaisActive ? "rgba(59, 130, 246, 0.15)" : "transparent"}
+            strokeColor={isLocaisActive ? "rgba(59, 130, 246, 0.6)" : "transparent"}
+            strokeWidth={isLocaisActive ? 2 : 0}
+          />
+        )}
+      </>
+    );
+
+    registerMapChildren('locais_persistent', persistentCircles);
+
+    const markersToRender = (
+      <>
 
         {/* Vigias salvos — Marcadores */}
         {vigias.map(vigia => (
@@ -204,16 +244,7 @@ export default function Locais() {
           </Marker>
         )}
 
-        {/* Ponto selecionado durante criação — Círculo preview */}
-        {uiMode === 'creating' && selectedPoint && (
-          <Circle
-            center={selectedPoint}
-            radius={vigiaRadius}
-            fillColor="rgba(59, 130, 246, 0.15)"
-            strokeColor="rgba(59, 130, 246, 0.6)"
-            strokeWidth={2}
-          />
-        )}
+
 
         {/* Ponto selecionado durante criação — Marcador */}
         {uiMode === 'creating' && selectedPoint && (
@@ -234,48 +265,41 @@ export default function Locais() {
             </View>
           </Marker>
         )}
+
+        {/* Relatos capturados pelos vigias (notificações) */}
+        {notifications.filter(n => n.type === 'vigia_relato').map(n => {
+          const color = n.crimeKey ? getCrimeIcon(n.crimeKey).color : '#64748b';
+          return (
+            <Marker
+              key={`vigia-relato-${n.id}`}
+              coordinate={{ latitude: n.latitude, longitude: n.longitude }}
+              title={n.crimeKey ? formatCrimeName(n.crimeKey) : 'Novo relato'}
+              description={n.texto}
+              anchor={{ x: 0.5, y: 1 }}
+              tracksViewChanges={tracksViewChanges}
+            >
+              <View style={{ alignItems: 'center', justifyContent: 'center', width: 44, height: 44 }}>
+                <Svg width={36} height={36} viewBox="-2 -2 28 28">
+                  <Path
+                    d="M2 4c0-1.1.9-2 2-2h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2h-6l-2 6-2-6H4c-1.1 0-2-.9-2-2V4z"
+                    fill={color}
+                    stroke="#ffffff"
+                    strokeWidth={2}
+                    strokeLinejoin="round"
+                  />
+                </Svg>
+              </View>
+            </Marker>
+          );
+        })}
       </>
     );
     registerMapChildren('locais', markersToRender);
-  }, [vigias, tracksViewChanges, uiMode, searchedPoint, selectedPoint, vigiaRadius, registerMapChildren]);
+  }, [vigias, tracksViewChanges, uiMode, searchedPoint, selectedPoint, vigiaRadius, registerMapChildren, activeTab, notifications]);
 
   /* ================= PERSISTÊNCIA ================= */
 
-  const loadVigias = async () => {
-    try {
-      const stored = await AsyncStorage.getItem(STORAGE_KEY);
-      if (stored) {
-        const parsed: Vigia[] = JSON.parse(stored);
-        setVigias(parsed);
-
-        // Se algum vigia não tiver endereço (ex: criado anteriormente), busca em background
-        const needsAddr = parsed.filter(v => !v.address);
-        if (needsAddr.length > 0) {
-          Promise.all(
-            parsed.map(async v => {
-              if (v.address) return v;
-              const addr = await fetchAddress(v.latitude, v.longitude);
-              return { ...v, address: addr };
-            })
-          ).then(updated => {
-            setVigias(updated);
-            AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
-          }).catch(() => { });
-        }
-      }
-    } catch (e) {
-      console.warn('Erro ao carregar vigias:', e);
-    }
-  };
-
-  const saveVigias = async (newVigias: Vigia[]) => {
-    try {
-      await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(newVigias));
-      setVigias(newVigias);
-    } catch (e) {
-      console.warn('Erro ao salvar vigias:', e);
-    }
-  };
+  // Carregamento e gravação ficam a cargo do VigiasContext (`saveVigias`)
 
   /* ================= KEYBOARD TRACKING ================= */
 
@@ -861,6 +885,21 @@ export default function Locais() {
                     <FontAwesome6 name="calendar" size={10} color="#64748b" style={{ marginRight: 6 }} />
                     <Text style={styles.vigiaCardTagText}>{formatDate(vigia.createdAt)}</Text>
                   </View>
+                  {alertsByVigia[vigia.id]?.total > 0 && (
+                    <View style={[styles.vigiaCardTag, alertsByVigia[vigia.id].unread > 0 && styles.vigiaCardTagAlert]}>
+                      <FontAwesome6
+                        name="bell"
+                        size={10}
+                        color={alertsByVigia[vigia.id].unread > 0 ? '#fbbf24' : '#64748b'}
+                        style={{ marginRight: 6 }}
+                      />
+                      <Text style={[styles.vigiaCardTagText, alertsByVigia[vigia.id].unread > 0 && styles.vigiaCardTagAlertText]}>
+                        {alertsByVigia[vigia.id].unread > 0
+                          ? `${alertsByVigia[vigia.id].unread} novo${alertsByVigia[vigia.id].unread > 1 ? 's' : ''}`
+                          : `${alertsByVigia[vigia.id].total} alerta${alertsByVigia[vigia.id].total > 1 ? 's' : ''}`}
+                      </Text>
+                    </View>
+                  )}
                   <View style={styles.vigiaCardFocusHint}>
                     <Text style={styles.vigiaCardFocusText}>Ver no mapa</Text>
                     <FontAwesome6 name="location-arrow" size={10} color="#60a5fa" />
@@ -1424,6 +1463,13 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontFamily: 'texgyR',
     color: '#94a3b8',
+  },
+  vigiaCardTagAlert: {
+    backgroundColor: 'rgba(251, 191, 36, 0.14)',
+  },
+  vigiaCardTagAlertText: {
+    color: '#fbbf24',
+    fontFamily: 'texgyB',
   },
   vigiaCardFocusHint: {
     flexDirection: 'row',

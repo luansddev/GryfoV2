@@ -71,6 +71,8 @@ export function HomeContent() {
   useEffect(() => {
     if (params.switchTab === 'relatos') {
       handleTabPress(1);
+    } else if (params.switchTab === 'locais') {
+      handleTabPress(2);
     }
   }, [params.switchTab, handleTabPress]);
 

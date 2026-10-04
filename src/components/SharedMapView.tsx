@@ -76,6 +76,9 @@ export default function SharedMapView() {
           </Marker>
         )}
 
+        {/* Persistent shapes to avoid Android unmount bugs */}
+        {getMapChildren('locais_persistent')}
+
         {/* Render children for the currently active tab */}
         {getMapChildren(tabKey)}
       </MapView>

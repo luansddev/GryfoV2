@@ -15,6 +15,7 @@ import { getDeviceId } from '../utils/device';
 import RelatoItem from '../components/RelatoItem';
 import RascunhoItem from '../components/RascunhoItem';
 import AddRelatoModal from '../components/AddRelatoModal';
+import TabTransitionView from '../components/TabTransitionView';
 
 const AnimatedTouchableOpacity = Animated.createAnimatedComponent(TouchableOpacity);
 
@@ -352,7 +353,7 @@ export default function Biblioteca() {
   };
 
   return (
-    <View style={styles.container}>
+    <TabTransitionView style={styles.container}>
       <TabView
         navigationState={{ index, routes }}
         renderScene={renderScene}
@@ -420,7 +421,7 @@ export default function Biblioteca() {
           })}
         </View>
       </View>
-    </View>
+    </TabTransitionView>
   );
 }
 

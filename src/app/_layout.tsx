@@ -1,7 +1,7 @@
 import { Tabs, usePathname, useRouter, useSegments } from 'expo-router';
 import { useFonts } from 'expo-font';
 import * as SplashScreen from 'expo-splash-screen';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import BottomMenu from '../../components/BottomMenu';
 import { View, StyleSheet } from 'react-native';
 import { SearchLocationProvider } from '../context/SearchLocationContext';
@@ -9,6 +9,8 @@ import { VigiaCreationProvider, useVigiaCreation } from '../context/VigiaCreatio
 import { onAuthStateChanged } from 'firebase/auth';
 import { auth } from '../config/firebaseConfig';
 import { SharedMapProvider } from '../context/SharedMapContext';
+import { VigiasProvider, useVigias } from '../context/VigiasContext';
+import { addNotificationTapListener } from '../services/notifications/localNotifications';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -57,20 +59,21 @@ export default function RootLayout() {
     }
   }, [fontsLoaded, error]);
 
+  const renderTabBar = useCallback(() => <BottomMenuWrapper />, []);
+
   if (!fontsLoaded && !error) {
     return null;
   }
 
-  const hideMenuRoutes = ['/', '/cadastro', '/login'];
-  const shouldShowMenu = !hideMenuRoutes.includes(pathname);
-
   return (
     <VigiaCreationProvider>
+    <VigiasProvider>
     <SearchLocationProvider>
     <SharedMapProvider>
+      {user ? <VigiaNotificationTapHandler /> : null}
       <View style={styles.container}>
       <View style={styles.content}>
-        <Tabs tabBar={() => shouldShowMenu ? <BottomMenuWrapper /> : null} screenOptions={{ headerShown: false }}>
+        <Tabs tabBar={renderTabBar} screenOptions={{ headerShown: false }}>
           <Tabs.Screen name="index" />
           <Tabs.Screen name="login" />
           <Tabs.Screen name="cadastro" />
@@ -84,16 +87,45 @@ export default function RootLayout() {
     </View>
     </SharedMapProvider>
     </SearchLocationProvider>
+    </VigiasProvider>
     </VigiaCreationProvider>
     
   );
 }
 
-// Wrapper que esconde o BottomMenu durante criação de vigia
+// Wrapper que esconde o BottomMenu durante criação de vigia ou em telas sem menu
 function BottomMenuWrapper() {
+  const pathname = usePathname();
   const { isCreatingVigia } = useVigiaCreation();
-  if (isCreatingVigia) return null;
+  const hideMenuRoutes = ['/', '/cadastro', '/login'];
+
+  if (hideMenuRoutes.includes(pathname) || isCreatingVigia) {
+    return null;
+  }
   return <BottomMenu />;
+}
+
+// Ao tocar numa notificação de vigia no sistema, leva o usuário ao relato no mapa
+function VigiaNotificationTapHandler() {
+  const router = useRouter();
+  const { markAsRead } = useVigias();
+
+  useEffect(() => {
+    return addNotificationTapListener((data) => {
+      if (data.notificationId) markAsRead(data.notificationId);
+
+      if (typeof data.latitude === 'number' && typeof data.longitude === 'number') {
+        router.push({
+          pathname: '/home',
+          params: { focusLat: data.latitude, focusLng: data.longitude, switchTab: 'relatos' },
+        });
+      } else {
+        router.push('/notificacoes');
+      }
+    });
+  }, [router, markAsRead]);
+
+  return null;
 }
 
 const styles = StyleSheet.create({

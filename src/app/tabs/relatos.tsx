@@ -539,6 +539,20 @@ export default function Relatos() {
     }
   }, [params.focusLat, params.focusLng]);
 
+  const [autoOpenedRelatoId, setAutoOpenedRelatoId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (params.openRelatoId && typeof params.openRelatoId === 'string' && relatos.length > 0) {
+      if (autoOpenedRelatoId !== params.openRelatoId) {
+        const target = relatos.find(r => r.id === params.openRelatoId);
+        if (target) {
+          setSelectedClusterLeaves([target]);
+          setAutoOpenedRelatoId(params.openRelatoId);
+        }
+      }
+    }
+  }, [params.openRelatoId, relatos, autoOpenedRelatoId]);
+
   useEffect(() => {
     let deviceId = '';
     getDeviceId().then(id => {

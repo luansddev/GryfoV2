@@ -1,10 +1,11 @@
 import { View, Text, StyleSheet } from 'react-native';
+import TabTransitionView from '../components/TabTransitionView';
 
 export default function Configuracoes() {
   return (
-    <View style={styles.container}>
+    <TabTransitionView style={styles.container}>
       <Text style={styles.text}>Configurações</Text>
-    </View>
+    </TabTransitionView>
   );
 }
 

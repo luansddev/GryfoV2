@@ -3,6 +3,7 @@ import { useRouter } from 'expo-router';
 import { auth } from '../config/firebaseConfig';
 import { signOut } from 'firebase/auth';
 import { FontAwesome6 } from '@expo/vector-icons';
+import TabTransitionView from '../components/TabTransitionView';
 
 export default function Conta() {
   const router = useRouter();
@@ -18,14 +19,14 @@ export default function Conta() {
   };
 
   return (
-    <View style={styles.container}>
+    <TabTransitionView style={styles.container}>
       <Text style={styles.title}>Minha Conta</Text>
       
       <TouchableOpacity style={styles.logoutButton} onPress={handleLogout} activeOpacity={0.8}>
         <FontAwesome6 name="arrow-right-from-bracket" size={18} color="#fff" style={styles.icon} />
         <Text style={styles.logoutText}>Sair da conta</Text>
       </TouchableOpacity>
-    </View>
+    </TabTransitionView>
   );
 }
 
