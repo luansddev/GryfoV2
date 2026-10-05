@@ -43,39 +43,8 @@ export default function SharedMapView() {
         rotateEnabled={mapInteractionEnabled}
         minZoomLevel={14}
         mapPadding={{ top: 0, right: 0, bottom: 0, left: 0 }}
+        showsUserLocation={true}
       >
-        {/* Marcador Customizado da Localização do Usuário */}
-        {userLocation && (
-          <Marker
-            coordinate={{
-              latitude: userLocation.coords.latitude,
-              longitude: userLocation.coords.longitude
-            }}
-            anchor={{ x: 0.5, y: 0.5 }}
-            zIndex={999}
-          >
-            <View style={{ alignItems: 'center', justifyContent: 'center' }}>
-              <View style={{
-                width: 24,
-                height: 24,
-                borderRadius: 12,
-                backgroundColor: 'rgba(37, 99, 235, 0.25)',
-                alignItems: 'center',
-                justifyContent: 'center'
-              }}>
-                <View style={{
-                  width: 14,
-                  height: 14,
-                  borderRadius: 7,
-                  backgroundColor: '#2563eb',
-                  borderWidth: 2,
-                  borderColor: '#fff'
-                }} />
-              </View>
-            </View>
-          </Marker>
-        )}
-
         {/* Persistent shapes to avoid Android unmount bugs */}
         {getMapChildren('locais_persistent')}
 

@@ -6,7 +6,7 @@ import Supercluster from 'supercluster';
 import { Alert, RefreshControl, Modal, Image } from 'react-native';
 import { Marker, Region, MapPressEvent } from 'react-native-maps';
 import Svg, { Path, Circle as SvgCircle } from 'react-native-svg';
-import { lifeCrimesKeys, physicalCrimesKeys, patrimonyCrimesKeys } from '../../constants/CrimeData';
+import { lifeCrimesKeys, physicalCrimesKeys, patrimonyCrimesKeys, mapNatureOptions } from '../../constants/CrimeData';
 
 // Helper to determine the color of the marker
 const getRelatoColor = (natureza?: string) => {
@@ -110,6 +110,9 @@ export default function Relatos() {
   const [isAddModalVisible, setIsAddModalVisible] = useState(false);
   const [relatos, setRelatos] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [mapFilter, setMapFilter] = useState<'life' | 'physical' | 'patrimony'>('life');
+  const [isFilterModalOpen, setIsFilterModalOpen] = useState(false);
+
   const [currentDeviceId, setCurrentDeviceId] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const { searchMode, searchedCity, userCity } = useSearchLocation();
@@ -180,8 +183,13 @@ export default function Relatos() {
     const clustersPhys = superclusterPhysical.getClusters(bbox, zoom).map(c => ({...c, properties: {...c.properties, nature: 'physical'}}));
     const clustersPatr = superclusterPatrimony.getClusters(bbox, zoom).map(c => ({...c, properties: {...c.properties, nature: 'patrimony'}}));
 
-    setVisibleClusters([...clustersLife, ...clustersPhys, ...clustersPatr]);
-  }, [sharedRegion, superclusterLife, superclusterPhysical, superclusterPatrimony]);
+    let newClusters = [];
+    if (mapFilter === 'life') newClusters.push(...clustersLife);
+    if (mapFilter === 'physical') newClusters.push(...clustersPhys);
+    if (mapFilter === 'patrimony') newClusters.push(...clustersPatr);
+
+    setVisibleClusters(newClusters);
+  }, [sharedRegion, superclusterLife, superclusterPhysical, superclusterPatrimony, mapFilter]);
 
   useEffect(() => {
     superclusterLife.load(pointsLife);
@@ -617,6 +625,10 @@ export default function Relatos() {
     return () => unsubscribe();
   }, [searchMode, searchedCity, userCity]);
 
+  const filteredRelatos = useMemo(() => {
+    return relatos.filter(r => getRelatoNature(r.crimeKey) === mapFilter);
+  }, [relatos, mapFilter]);
+
   return (
     <View style={styles.container} pointerEvents="box-none">
       {/* LISTA DE RELATOS */}
@@ -656,7 +668,7 @@ export default function Relatos() {
                 </Text>
               </View>
             ) : (
-              relatos.map((relato, index) => (
+              filteredRelatos.map((relato, index) => (
                 <RelatoItem 
                   key={relato.id} 
                   relato={relato} 
@@ -700,6 +712,20 @@ export default function Relatos() {
               <FontAwesome6 name="location-crosshairs" size={14} color="#333" />
               <Text style={styles.locationFabText}>Meu local</Text>
             </TouchableOpacity>
+
+            {(() => {
+              const currentNature = mapNatureOptions.find(opt => opt.id === mapFilter) || mapNatureOptions[0];
+              return (
+                <TouchableOpacity
+                  style={styles.filterIconBtn}
+                  onPress={() => setIsFilterModalOpen(true)}
+                  activeOpacity={0.8}
+                >
+                  <FontAwesome6 name={currentNature.icon as any} size={14} color={currentNature.color} style={{ marginRight: 6 }} />
+                  <FontAwesome6 name="chevron-down" size={10} color="#64748b" />
+                </TouchableOpacity>
+              );
+            })()}
           </View>
         )}
 
@@ -1010,6 +1036,47 @@ export default function Relatos() {
           setIsCreatingVigia(true);
         }}
       />
+
+      {/* FILTER MODAL */}
+      <Modal
+        visible={isFilterModalOpen}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setIsFilterModalOpen(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.filterModalContent}>
+            <View style={styles.filterModalHeader}>
+              <Text style={styles.filterModalTitle}>Filtrar por Natureza</Text>
+              <TouchableOpacity onPress={() => setIsFilterModalOpen(false)} style={styles.filterModalCloseBtn}>
+                <FontAwesome6 name="xmark" size={18} color="#666" />
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.filterModalNatureSection}>
+              {mapNatureOptions.map(item => {
+                const isSelected = mapFilter === item.id;
+                return (
+                  <TouchableOpacity
+                    key={item.id}
+                    style={[styles.filterModalNatureMenuItem, isSelected && styles.filterModalNatureMenuItemActive]}
+                    onPress={() => { setMapFilter(item.id as any); setIsFilterModalOpen(false); }}
+                    activeOpacity={0.7}
+                  >
+                    <View style={styles.filterModalNatureTriggerLeft}>
+                      <View style={[styles.filterModalNatureDot, { backgroundColor: item.color }]} />
+                      <Text style={[styles.filterModalNatureMenuText, isSelected && styles.filterModalNatureMenuTextActive]}>
+                        {item.label}
+                      </Text>
+                    </View>
+                    {isSelected && <FontAwesome6 name="check" size={12} color="#000" />}
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -1411,6 +1478,99 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontWeight: 'bold',
     fontSize: 14,
+  },
+  filterIconBtn: {
+    height: 36,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    backgroundColor: 'rgba(255, 255, 255, 0.95)',
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    elevation: 4,
+    shadowColor: '#000',
+    shadowOpacity: 0.15,
+    shadowRadius: 5,
+    shadowOffset: { width: 0, height: 2 },
+    marginLeft: 10,
+  },
+  filterBadge: {
+    position: 'absolute',
+    top: -4,
+    right: -4,
+    backgroundColor: '#0ea5e9',
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1.5,
+    borderColor: '#fff',
+  },
+  filterBadgeText: {
+    color: '#fff',
+    fontSize: 9,
+    fontFamily: 'texgyB',
+  },
+  filterModalContent: {
+    backgroundColor: '#fff',
+    borderRadius: 20,
+    width: '85%',
+    maxHeight: '75%',
+    padding: 20,
+    elevation: 10,
+    shadowColor: '#000',
+    shadowOpacity: 0.25,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 5 },
+  },
+  filterModalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 14,
+  },
+  filterModalTitle: {
+    fontFamily: 'texgyB',
+    fontSize: 18,
+    color: '#000',
+  },
+  filterModalCloseBtn: {
+    padding: 4,
+  },
+  filterModalNatureSection: {
+    marginBottom: 0,
+  },
+  filterModalNatureTriggerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  filterModalNatureDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    marginRight: 10,
+  },
+  filterModalNatureMenuItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    marginBottom: 4,
+  },
+  filterModalNatureMenuItemActive: {
+    backgroundColor: '#f1f5f9',
+  },
+  filterModalNatureMenuText: {
+    fontFamily: 'GlacialR',
+    fontSize: 14,
+    color: '#475569',
+  },
+  filterModalNatureMenuTextActive: {
+    fontFamily: 'texgyB',
+    color: '#000',
   }
 });
 
