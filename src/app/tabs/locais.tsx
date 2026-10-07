@@ -27,6 +27,7 @@ import Svg, { Path, Circle as SvgCircle } from 'react-native-svg';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useVigiaCreation } from '../../context/VigiaCreationContext';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useLocalSearchParams } from 'expo-router';
 import { useSharedMap } from '../../context/SharedMapContext';
 import { useVigias, Vigia } from '../../context/VigiasContext';
 import { getCrimeIcon, formatCrimeName } from '../../constants/CrimeData';
@@ -45,6 +46,7 @@ const RADIUS_DEFAULT = 500;
 export default function Locais() {
   const { setIsCreatingVigia } = useVigiaCreation();
   const insets = useSafeAreaInsets();
+  const params = useLocalSearchParams();
   const [userLocation, setUserLocation] = useState<Location.LocationObject | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -550,6 +552,13 @@ export default function Locais() {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     setUiMode('idle');
   };
+
+  useEffect(() => {
+    if (params.openListing === 'true') {
+      LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+      setUiMode('listing');
+    }
+  }, [params.openListing]);
 
 
 
