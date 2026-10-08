@@ -1,7 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import { View, TouchableOpacity, StyleSheet, Text } from 'react-native';
 import { usePathname, useRouter } from 'expo-router';
-import { Feather } from '@expo/vector-icons'; 
+import { Feather, AntDesign, Ionicons } from '@expo/vector-icons'; 
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useVigias } from '../src/context/VigiasContext';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -12,10 +12,10 @@ import Animated, {
 } from 'react-native-reanimated';
 
 const tabs = [
-  { name: 'home', icon: 'home' },
-  { name: 'notificacoes', icon: 'bell' },
-  { name: 'conta', icon: 'user' },
-  { name: 'configuracoes', icon: 'settings' },
+  { name: 'home', icon: 'map', size: 20, family: 'Feather' },
+  { name: 'analise', icon: 'fund', family: 'AntDesign' },
+  { name: 'notificacoes', icon: 'zap', family: 'Feather' },
+  { name: 'conta', icon: 'user', family: 'Feather' },
 ];
 
 const TAB_WIDTH = 48;
@@ -90,11 +90,14 @@ export default function BottomMenu() {
       <View style={styles.container}>
         {/* Camada 1: Ícones escuros na base da navbar */}
         <View style={styles.tabsRow} pointerEvents="none">
-          {tabs.map((tab) => (
-            <View key={tab.name} style={styles.iconWrapper}>
-              <Feather name={tab.icon as any} size={22} color="#000" />
-            </View>
-          ))}
+          {tabs.map((tab) => {
+            const IconComponent = tab.family === 'AntDesign' ? AntDesign : (tab.family === 'Ionicons' ? Ionicons : Feather);
+            return (
+              <View key={tab.name} style={styles.iconWrapper}>
+                <IconComponent name={tab.icon as any} size={tab.size || 22} color="#000" />
+              </View>
+            );
+          })}
         </View>
 
         {/* Camada 2: Cápsula animada com degradê e ícones brancos em máscara invertida */}
@@ -108,11 +111,14 @@ export default function BottomMenu() {
               style={StyleSheet.absoluteFill}
             />
             <Animated.View style={[styles.innerIconsRow, innerIconsAnimatedStyle]}>
-              {tabs.map((tab) => (
-                <View key={tab.name} style={styles.iconWrapper}>
-                  <Feather name={tab.icon as any} size={22} color="#fff" />
-                </View>
-              ))}
+              {tabs.map((tab) => {
+                const IconComponent = tab.family === 'AntDesign' ? AntDesign : (tab.family === 'Ionicons' ? Ionicons : Feather);
+                return (
+                  <View key={tab.name} style={styles.iconWrapper}>
+                    <IconComponent name={tab.icon as any} size={tab.size || 22} color="#fff" />
+                  </View>
+                );
+              })}
             </Animated.View>
           </View>
         </Animated.View>

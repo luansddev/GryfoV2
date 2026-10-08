@@ -169,7 +169,7 @@ export default function Notificacoes() {
       {/* Header */}
       <View style={styles.header}>
         <View style={{ flex: 1 }}>
-          <Text style={styles.title}>Notificações</Text>
+          <Text style={styles.title}>Atividade</Text>
           <Text style={styles.subtitle}>
             {notifications.length === 0
               ? vigias.length > 0
@@ -199,16 +199,14 @@ export default function Notificacoes() {
         <Animated.View entering={FadeInUp.duration(300)} style={styles.empty}>
           <View style={styles.emptyIconOuter}>
             <View style={styles.emptyIconInner}>
-              <FontAwesome6 name="eye" size={26} color="#2563eb" />
+              <FontAwesome6 name="bolt" size={26} color="#2563eb" />
             </View>
           </View>
           <Text style={styles.emptyTitle}>
-            {vigias.length > 0 ? 'Nada por perto, por enquanto' : 'Nenhum vigia ativo'}
+            Nenhuma atividade ainda
           </Text>
           <Text style={styles.emptyText}>
-            {vigias.length > 0
-              ? 'Seus vigias estão de olho. Quando alguém criar um relato dentro da área de um deles, você será avisado aqui.'
-              : 'Crie um vigia na aba "Vigias" para monitorar uma área e receber um aviso sempre que surgir um relato por lá.'}
+            As notificações dos seus vigias e as atualizações dos relatos que você criar aparecerão aqui.
           </Text>
           {vigias.length === 0 && (
             <TouchableOpacity

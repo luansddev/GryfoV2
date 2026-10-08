@@ -4,7 +4,7 @@ import TabTransitionView from '../components/TabTransitionView';
 export default function Configuracoes() {
   return (
     <TabTransitionView style={styles.container}>
-      <Text style={styles.text}>Configurações</Text>
+      <Text style={styles.text}>Análise</Text>
     </TabTransitionView>
   );
 }

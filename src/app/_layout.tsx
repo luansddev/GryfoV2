@@ -78,9 +78,9 @@ export default function RootLayout() {
           <Tabs.Screen name="login" />
           <Tabs.Screen name="cadastro" />
           <Tabs.Screen name="home" />
+          <Tabs.Screen name="analise" />
           <Tabs.Screen name="notificacoes" />
           <Tabs.Screen name="conta" />
-          <Tabs.Screen name="configuracoes" />
           <Tabs.Screen name="biblioteca" />
         </Tabs>
       </View>
