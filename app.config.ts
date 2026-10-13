@@ -2,8 +2,8 @@ import { ExpoConfig, ConfigContext } from 'expo/config';
 
 export default ({ config }: ConfigContext): ExpoConfig => ({
   ...config,
-  name: config.name || "Gryfo",
-  slug: config.slug || "Gryfo",
+  name: config.name || "Gardio",
+  slug: config.slug || "gardio",
   android: {
     ...config.android,
     config: {

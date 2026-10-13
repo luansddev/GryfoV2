@@ -11,7 +11,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const IBGE_POPULATION_URL =
   'https://servicodados.ibge.gov.br/api/v3/agregados/4709/periodos/2022/variaveis/93?localidades=N6[N3[35]]';
-const STORAGE_KEY = '@gryfo/ibge_sp_population_2022';
+const STORAGE_KEY = '@gardio/ibge_sp_population_2022';
 
 /** Chaves do JSON da SSP que não representam municípios */
 export const NON_CITY_KEYS = ['nome_da_cidade', 'timestamp', 'OUTRO PAIS'];

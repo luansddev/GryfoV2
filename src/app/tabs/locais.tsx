@@ -338,7 +338,7 @@ export default function Locais() {
         const query = encodeURIComponent(`${text.trim()}, São Paulo, Brasil`);
         const res = await fetch(
           `https://nominatim.openstreetmap.org/search?q=${query}&format=json&limit=5&countrycodes=br&accept-language=pt-BR`,
-          { headers: { 'User-Agent': 'Gryfo/1.0' } }
+          { headers: { 'User-Agent': 'Gardio/1.0' } }
         );
         const json = await res.json();
         // Filtra apenas resultados no estado de SP
@@ -395,7 +395,7 @@ export default function Locais() {
     try {
       const res = await fetch(
         `https://nominatim.openstreetmap.org/reverse?lat=${latitude}&lon=${longitude}&format=json&accept-language=pt-BR`,
-        { headers: { 'User-Agent': 'Gryfo/1.0' } }
+        { headers: { 'User-Agent': 'Gardio/1.0' } }
       );
       const data = await res.json();
       if (data && data.address) {

@@ -1,17 +1,18 @@
 {
   "expo": {
-    "name": "Gryfo",
-    "slug": "Gryfo",
+    "name": "Gardio",
+    "slug": "gardio",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/gardio-icon.png",
-    "scheme": "gryfo",
+    "scheme": "gardio",
     "userInterfaceStyle": "automatic",
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "br.gardio"
     },
     "android": {
-      "package": "br.gryfo.corp",
+      "package": "br.gardio",
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/gardio-icon.png",
         "backgroundColor": "#000000"

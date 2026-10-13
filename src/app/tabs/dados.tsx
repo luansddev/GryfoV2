@@ -274,7 +274,7 @@ export default function Dados() {
         try {
           const geoRes = await fetch(
             `https://nominatim.openstreetmap.org/reverse?lat=${loc.coords.latitude}&lon=${loc.coords.longitude}&format=json&accept-language=pt-BR`,
-            { headers: { 'User-Agent': 'Gryfo/1.0' } }
+            { headers: { 'User-Agent': 'Gardio/1.0' } }
           );
           const geoJson = await geoRes.json();
           if (!isMounted) return;

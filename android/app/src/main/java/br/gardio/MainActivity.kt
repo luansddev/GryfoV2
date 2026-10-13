@@ -1,4 +1,4 @@
-package br.gryfo.corp
+package br.gardio
 import expo.modules.splashscreen.SplashScreenManager
 
 import android.os.Build

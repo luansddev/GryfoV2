@@ -285,7 +285,7 @@ export default function Relatos() {
         const query = encodeURIComponent(`${text.trim()}, São Paulo, Brasil`);
         const res = await fetch(
           `https://nominatim.openstreetmap.org/search?q=${query}&format=json&limit=5&countrycodes=br&accept-language=pt-BR`,
-          { headers: { 'User-Agent': 'Gryfo/1.0' } }
+          { headers: { 'User-Agent': 'Gardio/1.0' } }
         );
         const json = await res.json();
         const filtered = json.filter((r: any) =>
@@ -344,7 +344,7 @@ export default function Relatos() {
       try {
         const res = await fetch(
           `https://nominatim.openstreetmap.org/reverse?lat=${latitude}&lon=${longitude}&format=json&accept-language=pt-BR`,
-          { headers: { 'User-Agent': 'Gryfo/1.0' } }
+          { headers: { 'User-Agent': 'Gardio/1.0' } }
         );
         const data = await res.json();
         if (data && data.address) {

@@ -125,7 +125,7 @@ export function VigiasProvider({ children }: { children: React.ReactNode }) {
     const trimmed = next.slice(0, MAX_NOTIFICATIONS);
     notificationsRef.current = trimmed;
     setNotifications(trimmed);
-    AsyncStorage.setItem(`@gryfo_vigia_notificacoes_${ownerKey}`, JSON.stringify(trimmed)).catch(e =>
+    AsyncStorage.setItem(`@gardio_vigia_notificacoes_${ownerKey}`, JSON.stringify(trimmed)).catch(e =>
       console.warn('Erro ao salvar notificações:', e)
     );
   }, [ownerKey]);
@@ -135,7 +135,7 @@ export function VigiasProvider({ children }: { children: React.ReactNode }) {
     vigiasRef.current = next;
     setVigias(next);
     try {
-      await AsyncStorage.setItem(`@gryfo_vigias_${ownerKey}`, JSON.stringify(next));
+      await AsyncStorage.setItem(`@gardio_vigias_${ownerKey}`, JSON.stringify(next));
     } catch (e) {
       console.warn('Erro ao salvar vigias:', e);
     }
@@ -153,8 +153,8 @@ export function VigiasProvider({ children }: { children: React.ReactNode }) {
     (async () => {
       try {
         const [storedVigias, storedNotifications] = await Promise.all([
-          AsyncStorage.getItem(`@gryfo_vigias_${ownerKey}`),
-          AsyncStorage.getItem(`@gryfo_vigia_notificacoes_${ownerKey}`),
+          AsyncStorage.getItem(`@gardio_vigias_${ownerKey}`),
+          AsyncStorage.getItem(`@gardio_vigia_notificacoes_${ownerKey}`),
         ]);
 
         if (!mounted) return;
@@ -216,7 +216,7 @@ export function VigiasProvider({ children }: { children: React.ReactNode }) {
 
     (async () => {
       const now = Date.now();
-      const lastCheckKey = `@gryfo_vigias_last_check_${ownerKey}`;
+      const lastCheckKey = `@gardio_vigias_last_check_${ownerKey}`;
       const storedLastCheck = await AsyncStorage.getItem(lastCheckKey);
       let lastCheck = storedLastCheck ? Number(storedLastCheck) : now;
       if (!Number.isFinite(lastCheck)) lastCheck = now;
@@ -345,7 +345,7 @@ export function VigiasProvider({ children }: { children: React.ReactNode }) {
       const myIds = new Set([deviceId, authUid].filter(Boolean) as string[]);
       if (myIds.size === 0) return;
 
-      const milestonesKey = `@gryfo_upvote_milestones_${ownerKey}`;
+      const milestonesKey = `@gardio_upvote_milestones_${ownerKey}`;
       const stored = await AsyncStorage.getItem(milestonesKey);
       const notifiedMilestones: Record<string, number> = stored ? JSON.parse(stored) : {};
 

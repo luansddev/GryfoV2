@@ -87,9 +87,9 @@ android {
     buildToolsVersion rootProject.ext.buildToolsVersion
     compileSdk rootProject.ext.compileSdkVersion
 
-    namespace 'br.gryfo.corp'
+    namespace 'br.gardio'
     defaultConfig {
-        applicationId 'br.gryfo.corp'
+        applicationId 'br.gardio'
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 1

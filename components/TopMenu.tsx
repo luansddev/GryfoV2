@@ -41,7 +41,7 @@ export default function TopMenu({ renderTabBar }: { renderTabBar?: () => React.R
     try {
       const geoRes = await fetch(
         `https://nominatim.openstreetmap.org/reverse?lat=${location.coords.latitude}&lon=${location.coords.longitude}&format=json&accept-language=pt-BR`,
-        { headers: { 'User-Agent': 'Gryfo/1.0' } }
+        { headers: { 'User-Agent': 'Gardio/1.0' } }
       );
       const geoJson = await geoRes.json();
       const nomeEncontrado = geoJson?.address?.city || geoJson?.address?.town || geoJson?.address?.municipality || geoJson?.address?.state || 'Localização desconhecida';
@@ -80,7 +80,7 @@ export default function TopMenu({ renderTabBar }: { renderTabBar?: () => React.R
 
       const geoRes = await fetch(
         `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(formatted)}, São Paulo, Brasil&format=json&limit=1`,
-        { headers: { 'User-Agent': 'Gryfo/1.0' } }
+        { headers: { 'User-Agent': 'Gardio/1.0' } }
       );
       const geoJson = await geoRes.json();
 

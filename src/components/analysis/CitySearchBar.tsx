@@ -57,7 +57,7 @@ export default function CitySearchBar() {
     try {
       const res = await fetch(
         `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(city.displayName)}, São Paulo, Brasil&format=json&limit=1`,
-        { headers: { 'User-Agent': 'Gryfo/1.0' } }
+        { headers: { 'User-Agent': 'Gardio/1.0' } }
       );
       const json = await res.json();
       if (json?.length > 0) {

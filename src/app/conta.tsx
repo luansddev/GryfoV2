@@ -156,7 +156,7 @@ export default function Conta() {
           {/* Top Logo */}
           <View style={styles.topBar}>
             <Image 
-              source={require('../../assets/images/gryfob.png')} 
+              source={require('../../assets/images/gardio_branco.png')} 
               style={styles.logoImageSmall} 
               resizeMode="contain" 
             />
