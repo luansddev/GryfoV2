@@ -1,328 +1,715 @@
-import React from 'react';
-import { View, Text, StyleSheet, ScrollView, ActivityIndicator, Dimensions } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import {
+  View,
+  Text,
+  Image,
+  StyleSheet,
+  ScrollView,
+  TouchableOpacity,
+  RefreshControl,
+  Keyboard,
+  Dimensions,
+} from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useSearchLocation } from '../context/SearchLocationContext';
-import { useCrimeAnalysis } from '../hooks/useCrimeAnalysis';
+import { LinearGradient } from 'expo-linear-gradient';
 import { FontAwesome6 } from '@expo/vector-icons';
 import { LineChart } from 'react-native-chart-kit';
-import { formatCrimeName } from '../constants/CrimeData';
+import { useRouter } from 'expo-router';
+import Animated, {
+  FadeInDown,
+  useSharedValue,
+  useAnimatedStyle,
+  withRepeat,
+  withTiming,
+} from 'react-native-reanimated';
+import { useSearchLocation } from '../context/SearchLocationContext';
+import { useCrimeAnalysis } from '../hooks/useCrimeAnalysis';
+import { getCrimeIcon } from '../constants/CrimeData';
+import { AnalysisResult, CrimeCategory } from '../services/analytics/types';
+import CitySearchBar from '../components/analysis/CitySearchBar';
+import { AnimatedBar, DonutChart, CompareRow, PositionGauge } from '../components/analysis/Charts';
+import {
+  fmtInt,
+  fmtDec,
+  fmtRate,
+  fmtCompact,
+  fmtPeriodLong,
+  fmtPeriodShort,
+  CATEGORY_META,
+  CategoryKey,
+  VERDICT_META,
+  getVerdict,
+} from '../components/analysis/format';
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
+const MAIN_CATEGORIES: CrimeCategory[] = ['patrimony', 'physical', 'life'];
 
-const getCategoryColor = (categoryId: string) => {
-  switch (categoryId) {
-    case 'life': return '#000000';
-    case 'physical': return '#dc2626';
-    case 'patrimony': return '#64748b';
-    default: return '#666';
-  }
-};
+/* ================================================================== */
+/* Blocos de layout                                                    */
+/* ================================================================== */
 
-const getCategoryName = (categoryId: string) => {
-  switch (categoryId) {
-    case 'life': return 'Crimes contra a Vida';
-    case 'physical': return 'Integridade Física';
-    case 'patrimony': return 'Crimes contra o Patrimônio';
-    default: return categoryId;
+function Card({
+  title,
+  subtitle,
+  icon,
+  delay = 0,
+  children,
+}: {
+  title: string;
+  subtitle?: string;
+  icon: string;
+  delay?: number;
+  children: React.ReactNode;
+}) {
+  return (
+    <Animated.View entering={FadeInDown.delay(delay).duration(450)} style={styles.card}>
+      <View style={styles.cardHeader}>
+        <View style={styles.cardIcon}>
+          <FontAwesome6 name={icon as any} size={13} color="#1c1f75" />
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.cardTitle}>{title}</Text>
+          {subtitle ? <Text style={styles.cardSubtitle}>{subtitle}</Text> : null}
+        </View>
+      </View>
+      {children}
+    </Animated.View>
+  );
+}
+
+function SkeletonBlock({ height, style }: { height: number; style?: any }) {
+  const opacity = useSharedValue(0.5);
+  useEffect(() => {
+    opacity.value = withRepeat(withTiming(1, { duration: 700 }), -1, true);
+  }, [opacity]);
+  const animated = useAnimatedStyle(() => ({ opacity: opacity.value }));
+  return <Animated.View style={[{ height, borderRadius: 24, backgroundColor: '#e2e8f0', marginBottom: 16 }, style, animated]} />;
+}
+
+function StateMessage({
+  icon,
+  title,
+  text,
+  action,
+}: {
+  icon: string;
+  title: string;
+  text: string;
+  action?: { label: string; onPress: () => void };
+}) {
+  return (
+    <Animated.View entering={FadeInDown.duration(400)} style={styles.stateContainer}>
+      <View style={styles.stateIcon}>
+        <FontAwesome6 name={icon as any} size={30} color="#1c1f75" />
+      </View>
+      <Text style={styles.stateTitle}>{title}</Text>
+      <Text style={styles.stateText}>{text}</Text>
+      {action && (
+        <TouchableOpacity style={styles.stateButton} onPress={action.onPress} activeOpacity={0.8}>
+          <Text style={styles.stateButtonText}>{action.label}</Text>
+        </TouchableOpacity>
+      )}
+    </Animated.View>
+  );
+}
+
+/* ================================================================== */
+/* Seções da análise                                                   */
+/* ================================================================== */
+
+function Hero({ analysis }: { analysis: AnalysisResult }) {
+  const [cardWidth, setCardWidth] = useState(SCREEN_WIDTH - 32);
+  const { displayName, population, totalOccurrences, ratePer100k, benchmark, dataQuality } = analysis;
+  const verdict = getVerdict(ratePer100k, benchmark?.stateRatePer100k);
+  const v = verdict ? VERDICT_META[verdict.verdict] : null;
+
+  const bgWidth = cardWidth > 0 ? cardWidth : SCREEN_WIDTH - 32;
+  const bgHeight = Math.round((bgWidth * 1308) / 736);
+
+  return (
+    <Animated.View entering={FadeInDown.duration(450)} style={styles.heroShadow}>
+      <View
+        style={styles.hero}
+        onLayout={(e) => {
+          const w = e.nativeEvent.layout.width;
+          if (w > 0 && Math.abs(w - cardWidth) > 1) {
+            setCardWidth(w);
+          }
+        }}
+      >
+        {/* Imagem de fundo com base encostada na base do card e preenchimento total */}
+        <View style={StyleSheet.absoluteFill}>
+          <Image
+            source={require('../../assets/images/bg_05.jpg')}
+            style={[styles.heroBgImage, { width: bgWidth, height: bgHeight }]}
+            resizeMode="cover"
+          />
+          {/* Degradê do transparente para o escuro (ainda parcialmente transparente) */}
+          <LinearGradient
+            colors={['rgba(3, 7, 26, 0.20)', 'rgba(8, 14, 46, 0.65)', 'rgba(2, 4, 18, 0.88)']}
+            locations={[0, 0.45, 1]}
+            start={{ x: 0.5, y: 0 }}
+            end={{ x: 0.5, y: 1 }}
+            style={StyleSheet.absoluteFill}
+          />
+        </View>
+
+        {/* Conteúdo com padding interno */}
+        <View style={styles.heroContent}>
+          <View style={styles.heroChip}>
+            <FontAwesome6 name="calendar" size={10} color="#e0e7ff" />
+            <Text style={styles.heroChipText}>{fmtPeriodLong(dataQuality.lastPeriod)}</Text>
+          </View>
+
+          <Text style={styles.heroCity} numberOfLines={2} adjustsFontSizeToFit>
+            {displayName ?? analysis.city}
+          </Text>
+          {population ? (
+            <Text style={styles.heroPop}>
+              <FontAwesome6 name="people-group" size={12} color="#c7d2fe" />  {fmtCompact(population)} de habitantes
+            </Text>
+          ) : null}
+
+          <View style={styles.heroStats}>
+            <View style={styles.heroStat}>
+              <Text style={styles.heroStatValue}>{fmtInt(totalOccurrences)}</Text>
+              <Text style={styles.heroStatLabel}>ocorrências{'\n'}no mês</Text>
+            </View>
+            {ratePer100k !== undefined && (
+              <>
+                <View style={styles.heroDivider} />
+                <View style={styles.heroStat}>
+                  <Text style={styles.heroStatValue}>{fmtRate(ratePer100k)}</Text>
+                  <Text style={styles.heroStatLabel}>a cada 100 mil{'\n'}habitantes</Text>
+                </View>
+              </>
+            )}
+          </View>
+
+          {v && verdict && (
+            <View style={styles.verdictPill}>
+              <View style={[styles.verdictDot, { backgroundColor: v.bg }]}>
+                <FontAwesome6 name={v.icon as any} size={10} color={v.color} />
+              </View>
+              <Text style={styles.verdictText}>{v.label}</Text>
+              {verdict.verdict !== 'average' && (
+                <Text style={styles.verdictPct}>
+                  {verdict.diffPct > 0 ? '+' : '−'}
+                  {fmtInt(Math.abs(verdict.diffPct))}%
+                </Text>
+              )}
+            </View>
+          )}
+        </View>
+      </View>
+    </Animated.View>
+  );
+}
+
+function Summary({ analysis }: { analysis: AnalysisResult }) {
+  const { categories, dominantCategory, dominantCrime, ratePer100k, benchmark } = analysis;
+  const items: { icon: string; color: string; text: React.ReactNode }[] = [];
+
+  const dominant = categories.find(c => c.id === dominantCategory);
+  if (dominant && dominantCategory) {
+    const inTen = Math.round(dominant.percentage / 10);
+    if (inTen >= 1) {
+      items.push({
+        icon: CATEGORY_META[dominantCategory].icon,
+        color: CATEGORY_META[dominantCategory].color,
+        text: (
+          <>
+            <Text style={styles.bold}>{inTen} em cada 10</Text> registros são {CATEGORY_META[dominantCategory].plural}
+          </>
+        ),
+      });
+    }
   }
-};
+
+  if (dominantCrime) {
+    const { icon, color } = getCrimeIcon(dominantCrime.name);
+    items.push({
+      icon,
+      color,
+      text: (
+        <>
+          Tipo mais registrado: <Text style={styles.bold}>{dominantCrime.name}</Text>
+        </>
+      ),
+    });
+  }
+
+  const verdict = getVerdict(ratePer100k, benchmark?.stateRatePer100k);
+  if (verdict) {
+    const meta = VERDICT_META[verdict.verdict];
+    items.push({
+      icon: 'scale-balanced',
+      color: meta.color,
+      text:
+        verdict.verdict === 'average' ? (
+          <>Ocorrências por habitante <Text style={styles.bold}>parecidas com a média</Text> do estado</>
+        ) : (
+          <>
+            <Text style={[styles.bold, { color: meta.color }]}>
+              {fmtInt(Math.abs(verdict.diffPct))}% {verdict.diffPct < 0 ? 'menos' : 'mais'}
+            </Text>{' '}
+            ocorrências por habitante que a média de SP
+          </>
+        ),
+    });
+  }
+
+  const life = categories.find(c => c.id === 'life');
+  if (life) {
+    items.push({
+      icon: CATEGORY_META.life.icon,
+      color: CATEGORY_META.life.color,
+      text:
+        life.total > 0 ? (
+          <>
+            <Text style={styles.bold}>{fmtInt(life.total)}</Text> {life.total === 1 ? 'crime' : 'crimes'} contra a vida no mês
+          </>
+        ) : (
+          <>Nenhum crime contra a vida registrado no mês</>
+        ),
+    });
+  }
+
+  if (items.length === 0) return null;
+
+  return (
+    <Card title="Em resumo" icon="bolt" delay={80}>
+      <View style={{ gap: 12 }}>
+        {items.map((item, i) => (
+          <View key={i} style={styles.summaryRow}>
+            <View style={[styles.summaryIcon, { backgroundColor: `${item.color}14` }]}>
+              <FontAwesome6 name={item.icon as any} size={13} color={item.color} />
+            </View>
+            <Text style={styles.summaryText}>{item.text}</Text>
+          </View>
+        ))}
+      </View>
+    </Card>
+  );
+}
+
+function StatePosition({ analysis }: { analysis: AnalysisResult }) {
+  const { benchmark, ratePer100k } = analysis;
+  if (!benchmark?.stateRatePer100k || ratePer100k === undefined) return null;
+  const max = Math.max(ratePer100k, benchmark.stateRatePer100k) * 1.1;
+
+  return (
+    <Card
+      title="Comparado ao estado"
+      subtitle="Ocorrências a cada 100 mil habitantes"
+      icon="ranking-star"
+      delay={160}
+    >
+      <CompareRow
+        icon="chart-simple"
+        label="Total de ocorrências"
+        color="#3331ff"
+        cityValue={ratePer100k}
+        stateValue={benchmark.stateRatePer100k}
+        max={max}
+        format={fmtRate}
+        cityLabel="Local"
+        delay={200}
+      />
+      {benchmark.rateRank && (
+        <View style={styles.gaugeSection}>
+          <Text style={styles.gaugeTitle}>
+            Menos ocorrências por habitante que{' '}
+            <Text style={styles.bold}>{fmtInt(benchmark.rateRank.lowerThanPct)}%</Text> das cidades paulistas
+          </Text>
+          <PositionGauge position={benchmark.rateRank.position} outOf={benchmark.rateRank.outOf} />
+        </View>
+      )}
+    </Card>
+  );
+}
+
+function Breakdown({ analysis }: { analysis: AnalysisResult }) {
+  const { categories, otherTotal = 0, totalOccurrences } = analysis;
+  const entries: { key: CategoryKey; total: number; pct: number }[] = MAIN_CATEGORIES.map(id => {
+    const c = categories.find(x => x.id === id);
+    return { key: id, total: c?.total ?? 0, pct: c?.percentage ?? 0 };
+  });
+  if (otherTotal > 0) {
+    entries.push({ key: 'other', total: otherTotal, pct: totalOccurrences > 0 ? (otherTotal / totalOccurrences) * 100 : 0 });
+  }
+
+  const donutSize = Math.round(Math.min(150, SCREEN_WIDTH * 0.36));
+
+  return (
+    <Card title="Tipos de ocorrência" subtitle="Como os registros se dividem" icon="chart-pie" delay={240}>
+      <View style={styles.breakdownRow}>
+        <DonutChart
+          size={donutSize}
+          segments={entries.map(e => ({ value: e.total, color: CATEGORY_META[e.key].color }))}
+          centerValue={fmtInt(totalOccurrences)}
+          centerLabel="registros"
+        />
+        <View style={styles.legend}>
+          {entries.map(e => (
+            <View key={e.key} style={styles.legendItem}>
+              <View style={[styles.legendDot, { backgroundColor: CATEGORY_META[e.key].color }]} />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.legendLabel} numberOfLines={1}>{CATEGORY_META[e.key].label}</Text>
+                <Text style={styles.legendCount}>{fmtInt(e.total)} casos</Text>
+              </View>
+              <Text style={styles.legendPct}>{e.pct < 1 && e.pct > 0 ? '<1' : fmtInt(e.pct)}%</Text>
+            </View>
+          ))}
+        </View>
+      </View>
+      {otherTotal > 0 && (
+        <Text style={styles.footnote}>“Outros” inclui casos como tráfico, porte de arma e extorsão.</Text>
+      )}
+    </Card>
+  );
+}
+
+function CategoryComparison({ analysis }: { analysis: AnalysisResult }) {
+  const { benchmark, categories } = analysis;
+  if (!benchmark) return null;
+  const usesRates = !!(benchmark.cityCategoryRates && benchmark.stateCategoryRates);
+
+  return (
+    <Card
+      title="Cidade × Estado por categoria"
+      subtitle={usesRates ? 'Ocorrências a cada 100 mil habitantes' : 'Participação no total de registros'}
+      icon="code-compare"
+      delay={320}
+    >
+      <View style={{ gap: 20 }}>
+        {MAIN_CATEGORIES.map((id, i) => {
+          const cityValue = usesRates
+            ? benchmark.cityCategoryRates![id]
+            : categories.find(c => c.id === id)?.percentage ?? 0;
+          const stateValue = usesRates ? benchmark.stateCategoryRates![id] : benchmark.stateCategoryShares[id];
+          return (
+            <CompareRow
+              key={id}
+              icon={CATEGORY_META[id].icon}
+              label={CATEGORY_META[id].label}
+              color={CATEGORY_META[id].color}
+              cityValue={cityValue}
+              stateValue={stateValue}
+              max={Math.max(cityValue, stateValue) * 1.1}
+              format={usesRates ? fmtRate : (n: number) => `${fmtDec(n, 1)}%`}
+              cityLabel="Local"
+              delay={350 + i * 120}
+            />
+          );
+        })}
+      </View>
+    </Card>
+  );
+}
+
+function TopCrimes({ analysis }: { analysis: AnalysisResult }) {
+  const top = analysis.topCrimes ?? [];
+  if (top.length === 0) return null;
+  const max = top[0].total;
+
+  return (
+    <Card title="Ocorrências mais comuns" subtitle="Os 5 tipos mais registrados" icon="list-ol" delay={400}>
+      <View style={{ gap: 14 }}>
+        {top.map((item, i) => {
+          const { icon, color } = getCrimeIcon(item.key);
+          return (
+            <View key={item.key} style={{ gap: 6 }}>
+              <View style={styles.topRow}>
+                <Text style={styles.topRank}>{i + 1}</Text>
+                <View style={[styles.topIcon, { backgroundColor: `${color}14` }]}>
+                  <FontAwesome6 name={icon as any} size={12} color={color} />
+                </View>
+                <Text style={styles.topName} numberOfLines={1}>{item.name}</Text>
+                <Text style={styles.topCount}>{fmtInt(item.total)}</Text>
+              </View>
+              <View style={{ paddingLeft: 52 }}>
+                <AnimatedBar pct={(item.total / max) * 100} color={i === 0 ? '#3331ff' : '#a5b4fc'} height={8} delay={450 + i * 90} />
+              </View>
+            </View>
+          );
+        })}
+      </View>
+    </Card>
+  );
+}
+
+function Trend({ analysis }: { analysis: AnalysisResult }) {
+  const { trend, dataQuality } = analysis;
+  if (!trend || !dataQuality.hasEnoughHistoryForTrend || trend.points.length < 2) return null;
+  const change = trend.periodChange;
+
+  return (
+    <Card title="Evolução mês a mês" subtitle="Total de ocorrências registradas" icon="chart-line" delay={480}>
+      <LineChart
+        data={{
+          labels: trend.points.map(p => fmtPeriodShort(p.month, p.year)),
+          datasets: [{ data: trend.points.map(p => p.total), color: (o = 1) => `rgba(51, 49, 255, ${o})`, strokeWidth: 3 }],
+        }}
+        width={SCREEN_WIDTH - 72}
+        height={190}
+        withInnerLines={false}
+        chartConfig={{
+          backgroundGradientFrom: '#ffffff',
+          backgroundGradientTo: '#ffffff',
+          decimalPlaces: 0,
+          color: (o = 1) => `rgba(51, 49, 255, ${o})`,
+          labelColor: (o = 1) => `rgba(100, 116, 139, ${o})`,
+          propsForDots: { r: '4', strokeWidth: '2', stroke: '#fff' },
+        }}
+        bezier
+        style={{ marginLeft: -12 }}
+      />
+      {change && change.percentageChange !== null && (
+        <View style={styles.trendPill}>
+          <FontAwesome6
+            name={change.absoluteChange > 0 ? 'arrow-trend-up' : change.absoluteChange < 0 ? 'arrow-trend-down' : 'minus'}
+            size={13}
+            color={change.absoluteChange > 0 ? '#dc2626' : change.absoluteChange < 0 ? '#16a34a' : '#64748b'}
+          />
+          <Text style={styles.trendText}>
+            {change.absoluteChange > 0 ? '+' : ''}
+            {fmtDec(change.percentageChange, 1)}% em relação ao mês anterior
+          </Text>
+        </View>
+      )}
+    </Card>
+  );
+}
+
+function VigiaCta({ analysis }: { analysis: AnalysisResult }) {
+  const router = useRouter();
+  const targetCity = analysis.displayName ?? analysis.city ?? 'sua região';
+
+  return (
+    <Animated.View entering={FadeInDown.delay(520).duration(450)} style={styles.ctaCard}>
+      <View style={styles.ctaIcon}>
+        <FontAwesome6 name="eye" size={18} color="#3331ff" />
+      </View>
+      <View style={{ flex: 1 }}>
+        <Text style={styles.ctaTitle} numberOfLines={2}>Fique de olho em {targetCity}</Text>
+        <Text style={styles.ctaText}>Crie um Vigia e receba alertas de novos relatos.</Text>
+      </View>
+      <TouchableOpacity
+        style={styles.ctaButton}
+        activeOpacity={0.85}
+        onPress={() => router.push({ pathname: '/home', params: { switchTab: 'locais' } })}
+      >
+        <FontAwesome6 name="arrow-right" size={14} color="#fff" />
+      </TouchableOpacity>
+    </Animated.View>
+  );
+}
+
+/* ================================================================== */
+/* Tela                                                                */
+/* ================================================================== */
 
 export default function Analise() {
   const insets = useSafeAreaInsets();
   const { searchMode, userCity, searchedCity } = useSearchLocation();
   const activeCity = searchMode ? searchedCity : userCity;
-  
   const { analysis, loading, error, refresh } = useCrimeAnalysis(activeCity);
+  const [refreshing, setRefreshing] = useState(false);
 
-  const renderContent = () => {
-    if (loading) {
+  const onRefresh = async () => {
+    setRefreshing(true);
+    try {
+      await refresh();
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
+  const renderBody = () => {
+    if (!activeCity) {
       return (
-        <View style={styles.centerContainer}>
-          <ActivityIndicator size="large" color="#000" />
-          <Text style={styles.loadingText}>Analisando dados da região...</Text>
+        <StateMessage
+          icon="map-location-dot"
+          title="Escolha uma cidade"
+          text={
+            searchMode
+              ? 'Use a busca acima para ver a análise de qualquer cidade paulista.'
+              : 'Não conseguimos identificar sua localização. Pesquise uma cidade na barra acima.'
+          }
+        />
+      );
+    }
+
+    if (loading && !refreshing) {
+      return (
+        <View style={styles.scrollContent}>
+          <SkeletonBlock height={230} />
+          <SkeletonBlock height={170} />
+          <SkeletonBlock height={200} />
         </View>
       );
     }
 
     if (error === 'error') {
       return (
-        <View style={styles.centerContainer}>
-          <FontAwesome6 name="triangle-exclamation" size={48} color="#dc2626" style={{ marginBottom: 16 }} />
-          <Text style={styles.errorText}>Não foi possível carregar a análise.</Text>
-          <Text style={[styles.errorText, { fontSize: 14, marginTop: 8 }]} onPress={refresh}>Tentar novamente</Text>
-        </View>
+        <StateMessage
+          icon="wifi"
+          title="Algo deu errado"
+          text="Não foi possível carregar a análise. Verifique sua conexão."
+          action={{ label: 'Tentar novamente', onPress: refresh }}
+        />
       );
     }
 
     if (error === 'not_found' || !analysis) {
       return (
-        <View style={styles.centerContainer}>
-          <FontAwesome6 name="chart-pie" size={48} color="#ccc" style={{ marginBottom: 16 }} />
-          <Text style={styles.errorText}>Não encontramos registros suficientes para gerar uma análise desta região.</Text>
-        </View>
+        <StateMessage
+          icon="magnifying-glass-location"
+          title="Sem dados para esta cidade"
+          text="Ainda não há registros oficiais suficientes para analisar esta região. Tente outra cidade."
+        />
       );
     }
 
-    const {
-      totalOccurrences,
-      ratePer100k,
-      categories,
-      dominantCategory,
-      dominantCrime,
-      trend,
-      insights,
-      recommendations,
-      dataQuality,
-    } = analysis;
-
     return (
-      <ScrollView contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 100 }]}>
-        
-        {/* HEADER */}
-        <View style={styles.header}>
-          <Text style={styles.headerTitle}>Análise da sua região</Text>
-          <Text style={styles.headerCity}>
-            {activeCity ? activeCity.replace(/\bS\./, 'SÃO ').toLowerCase().split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ') : 'Região desconhecida'}
-          </Text>
-          <Text style={styles.headerSubtitle}>Panorama baseado nos registros oficiais disponíveis</Text>
-        </View>
+      <ScrollView
+        key={analysis.city}
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 110 }]}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+        onScrollBeginDrag={Keyboard.dismiss}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#1c1f75" />}
+      >
+        <Hero analysis={analysis} />
+        <Summary analysis={analysis} />
+        <StatePosition analysis={analysis} />
+        <Breakdown analysis={analysis} />
+        <CategoryComparison analysis={analysis} />
+        <TopCrimes analysis={analysis} />
+        <Trend analysis={analysis} />
+        <VigiaCta analysis={analysis} />
 
-        {/* PANORAMA */}
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>PANORAMA</Text>
-          <View style={styles.panoramaRow}>
-            <View style={styles.panoramaItem}>
-              <Text style={styles.panoramaValue}>{totalOccurrences.toLocaleString('pt-BR')}</Text>
-              <Text style={styles.panoramaLabel}>registros analisados</Text>
-            </View>
-            <View style={styles.panoramaItem}>
-              {ratePer100k !== undefined ? (
-                <>
-                  <Text style={styles.panoramaValue}>{ratePer100k.toFixed(1).replace('.', ',')}</Text>
-                  <Text style={styles.panoramaLabel}>por 100 mil habitantes</Text>
-                </>
-              ) : (
-                <>
-                  <Text style={styles.panoramaValue}>-</Text>
-                  <Text style={styles.panoramaLabel}>Taxa populacional indisponível</Text>
-                </>
-              )}
-            </View>
-          </View>
-        </View>
-
-        {/* PRINCIPAL DESTAQUE */}
-        {dominantCategory && (
-          <View style={[styles.card, { backgroundColor: '#f8fafc' }]}>
-            <Text style={styles.cardTitle}>PRINCIPAL DESTAQUE</Text>
-            <Text style={styles.highlightText}>
-              <Text style={{ fontFamily: 'texgyB', color: getCategoryColor(dominantCategory) }}>
-                {getCategoryName(dominantCategory)}
-              </Text>{' '}
-              representam {categories.find(c => c.id === dominantCategory)?.percentage.toFixed(1).replace('.', ',')}% dos registros analisados.
-            </Text>
-          </View>
-        )}
-
-        {/* EVOLUÇÃO DOS REGISTROS */}
-        {trend && dataQuality.hasEnoughHistoryForTrend ? (
-          <View style={styles.card}>
-            <Text style={styles.cardTitle}>EVOLUÇÃO DOS REGISTROS</Text>
-            
-            <LineChart
-              data={{
-                labels: trend.points.map(p => `${p.month}/${p.year.toString().slice(-2)}`),
-                datasets: [
-                  {
-                    data: trend.points.map(p => p.total),
-                    color: (opacity = 1) => `rgba(0, 0, 0, ${opacity})`,
-                    strokeWidth: 2
-                  }
-                ]
-              }}
-              width={SCREEN_WIDTH - 64} // padding card (20*2) + margin (12*2) = 64
-              height={220}
-              chartConfig={{
-                backgroundColor: '#ffffff',
-                backgroundGradientFrom: '#ffffff',
-                backgroundGradientTo: '#ffffff',
-                decimalPlaces: 0,
-                color: (opacity = 1) => `rgba(0, 0, 0, ${opacity})`,
-                labelColor: (opacity = 1) => `rgba(100, 100, 100, ${opacity})`,
-                style: { borderRadius: 16 },
-                propsForDots: { r: '4', strokeWidth: '2', stroke: '#fff' }
-              }}
-              bezier
-              style={{ marginVertical: 8, borderRadius: 16 }}
-            />
-            
-            {trend.periodChange && trend.periodChange.percentageChange !== null && (
-              <View style={styles.trendChangeContainer}>
-                <Text style={styles.trendChangeLabel}>Variação recente:</Text>
-                <Text style={[styles.trendChangeValue, { color: trend.periodChange.absoluteChange > 0 ? '#dc2626' : (trend.periodChange.absoluteChange < 0 ? '#16a34a' : '#64748b') }]}>
-                  {trend.periodChange.absoluteChange > 0 ? '+' : ''}{trend.periodChange.percentageChange.toFixed(1).replace('.', ',')}%
-                </Text>
-              </View>
-            )}
-          </View>
-        ) : (
-          <View style={styles.card}>
-            <Text style={styles.cardTitle}>EVOLUÇÃO DOS REGISTROS</Text>
-            <Text style={styles.infoText}>São necessários mais períodos para analisar tendências e gerar gráficos temporais.</Text>
-          </View>
-        )}
-
-        {/* DISTRIBUIÇÃO POR CATEGORIA */}
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>DISTRIBUIÇÃO POR CATEGORIA</Text>
-          <View style={styles.distributionContainer}>
-            {categories.map(cat => (
-              <View key={cat.id} style={styles.distributionRow}>
-                <View style={styles.distributionLabels}>
-                  <Text style={styles.distributionName}>{getCategoryName(cat.id)}</Text>
-                  <Text style={styles.distributionPct}>{cat.percentage.toFixed(1).replace('.', ',')}%</Text>
-                </View>
-                <View style={styles.distributionBarBg}>
-                  <View style={[styles.distributionBarFill, { width: `${cat.percentage}%`, backgroundColor: getCategoryColor(cat.id) }]} />
-                </View>
-              </View>
-            ))}
-          </View>
-        </View>
-
-        {/* OCORRÊNCIA MAIS FREQUENTE */}
-        {dominantCrime && (
-          <View style={styles.card}>
-            <Text style={styles.cardTitle}>OCORRÊNCIA MAIS FREQUENTE</Text>
-            <View style={styles.dominantCrimeContainer}>
-              <Text style={styles.dominantCrimeName}>{dominantCrime.name}</Text>
-              <Text style={styles.dominantCrimeInfo}>{dominantCrime.total} registros</Text>
-              <Text style={styles.dominantCrimeInfoPct}>{dominantCrime.percentage.toFixed(1).replace('.', ',')}% do total analisado</Text>
-            </View>
-          </View>
-        )}
-
-        {/* DESTAQUES DA ANÁLISE */}
-        {insights.length > 0 && (
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>DESTAQUES DA ANÁLISE</Text>
-            {insights.map(insight => (
-              <View key={insight.id} style={styles.insightCard}>
-                <FontAwesome6 
-                  name={insight.type === 'increase' ? 'arrow-trend-up' : (insight.type === 'decrease' ? 'arrow-trend-down' : 'circle-info')} 
-                  size={16} 
-                  color={insight.type === 'increase' ? '#dc2626' : (insight.type === 'decrease' ? '#16a34a' : '#2563eb')} 
-                  style={{ marginRight: 12, marginTop: 2 }}
-                />
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.insightTitle}>{insight.title}</Text>
-                  <Text style={styles.insightDesc}>{insight.description}</Text>
-                </View>
-              </View>
-            ))}
-          </View>
-        )}
-
-        {/* RECOMENDAÇÕES */}
-        {recommendations.length > 0 && (
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>RECOMENDAÇÕES</Text>
-            {recommendations.map(rec => (
-              <View key={rec.id} style={styles.insightCard}>
-                <FontAwesome6 
-                  name={rec.type === 'warning' ? 'triangle-exclamation' : 'lightbulb'} 
-                  size={16} 
-                  color={rec.type === 'warning' ? '#d97706' : '#64748b'} 
-                  style={{ marginRight: 12, marginTop: 2 }}
-                />
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.insightTitle}>{rec.title}</Text>
-                  <Text style={styles.insightDesc}>{rec.description}</Text>
-                </View>
-              </View>
-            ))}
-          </View>
-        )}
-
-        {/* SOBRE ESTA ANÁLISE */}
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>SOBRE ESTA ANÁLISE</Text>
-          <View style={styles.qualityContainer}>
-            <View style={styles.qualityRow}><Text style={styles.qualityLabel}>Fonte:</Text><Text style={styles.qualityValue}>SSP-SP</Text></View>
-            <View style={styles.qualityRow}><Text style={styles.qualityLabel}>Meses disponíveis:</Text><Text style={styles.qualityValue}>{dataQuality.availableMonths}</Text></View>
-            {dataQuality.availableMonths > 0 && (
-               <View style={styles.qualityRow}><Text style={styles.qualityLabel}>Período analisado:</Text><Text style={styles.qualityValue}>{dataQuality.firstPeriod} a {dataQuality.lastPeriod}</Text></View>
-            )}
-            <View style={styles.qualityRow}><Text style={styles.qualityLabel}>População:</Text><Text style={styles.qualityValue}>{dataQuality.hasPopulation ? 'IBGE' : 'Indisponível nesta análise'}</Text></View>
-          </View>
-        </View>
-        
-        <Text style={styles.disclaimer}>
-          Esta análise utiliza registros oficiais disponíveis e não representa a totalidade dos crimes ocorridos. 
-          Variações podem refletir diferenças de registro, notificação e disponibilidade dos dados.
+        <Text style={styles.sources}>
+          Fontes: SSP-SP ({fmtPeriodLong(analysis.dataQuality.lastPeriod)})
+          {analysis.dataQuality.hasPopulation ? ' e IBGE (Censo 2022)' : ''}. Os números refletem apenas ocorrências
+          registradas oficialmente.
         </Text>
-
       </ScrollView>
     );
   };
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top }]}>
-      {renderContent()}
+    <View style={styles.container}>
+      <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
+        <View style={styles.headerTitleRow}>
+          <Text style={styles.headerTitle}>Análise</Text>
+          <Text style={styles.headerSubtitle}>Segurança nas cidades de SP</Text>
+        </View>
+        <CitySearchBar />
+      </View>
+      <View style={{ flex: 1 }}>{renderBody()}</View>
     </View>
   );
 }
 
+/* ================================================================== */
+/* Estilos                                                             */
+/* ================================================================== */
+
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f1f5f9' },
-  centerContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24 },
+  bold: { fontFamily: 'texgyB', color: '#0f172a' },
+
+  header: {
+    backgroundColor: '#f5f5f5',
+    paddingHorizontal: 16,
+    paddingBottom: 16,
+    borderBottomLeftRadius: 30,
+    borderBottomRightRadius: 30,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.12,
+    shadowRadius: 12,
+    elevation: 8,
+    zIndex: 10,
+  },
+  headerTitleRow: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 12, paddingHorizontal: 4 },
+  headerTitle: { fontFamily: 'texgyB', fontSize: 26, color: '#000' },
+  headerSubtitle: { fontFamily: 'texgyR', fontSize: 12, color: '#64748b' },
+
   scrollContent: { paddingHorizontal: 16, paddingTop: 20 },
-  loadingText: { marginTop: 16, fontFamily: 'texgyR', fontSize: 16, color: '#475569' },
-  errorText: { fontFamily: 'texgyR', fontSize: 16, color: '#475569', textAlign: 'center', lineHeight: 24 },
-  
-  header: { marginBottom: 24 },
-  headerTitle: { fontFamily: 'texgyR', fontSize: 14, color: '#64748b', textTransform: 'uppercase', letterSpacing: 1 },
-  headerCity: { fontFamily: 'texgyB', fontSize: 28, color: '#0f172a', marginVertical: 4 },
-  headerSubtitle: { fontFamily: 'texgyR', fontSize: 14, color: '#475569' },
-  
-  card: { backgroundColor: '#ffffff', borderRadius: 16, padding: 20, marginBottom: 16, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 8, elevation: 2 },
-  cardTitle: { fontFamily: 'texgyB', fontSize: 13, color: '#94a3b8', marginBottom: 16, letterSpacing: 1 },
-  
-  panoramaRow: { flexDirection: 'row', justifyContent: 'space-between', gap: 16 },
-  panoramaItem: { flex: 1 },
-  panoramaValue: { fontFamily: 'texgyB', fontSize: 24, color: '#0f172a' },
-  panoramaLabel: { fontFamily: 'texgyR', fontSize: 13, color: '#64748b', marginTop: 4 },
-  
-  highlightText: { fontFamily: 'texgyR', fontSize: 17, color: '#334155', lineHeight: 26 },
-  
-  trendChangeContainer: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginTop: 16 },
-  trendChangeLabel: { fontFamily: 'texgyR', fontSize: 14, color: '#64748b', marginRight: 8 },
-  trendChangeValue: { fontFamily: 'texgyB', fontSize: 16 },
-  infoText: { fontFamily: 'texgyR', fontSize: 14, color: '#64748b', fontStyle: 'italic', lineHeight: 22 },
-  
-  distributionContainer: { gap: 16 },
-  distributionRow: { gap: 8 },
-  distributionLabels: { flexDirection: 'row', justifyContent: 'space-between' },
-  distributionName: { fontFamily: 'texgyR', fontSize: 14, color: '#334155' },
-  distributionPct: { fontFamily: 'texgyB', fontSize: 14, color: '#0f172a' },
-  distributionBarBg: { height: 8, backgroundColor: '#f1f5f9', borderRadius: 4, overflow: 'hidden' },
-  distributionBarFill: { height: '100%', borderRadius: 4 },
-  
-  dominantCrimeContainer: { alignItems: 'center', paddingVertical: 12 },
-  dominantCrimeName: { fontFamily: 'texgyB', fontSize: 20, color: '#0f172a', textAlign: 'center', marginBottom: 8 },
-  dominantCrimeInfo: { fontFamily: 'texgyB', fontSize: 15, color: '#334155' },
-  dominantCrimeInfoPct: { fontFamily: 'texgyR', fontSize: 14, color: '#64748b', marginTop: 4 },
-  
-  section: { marginBottom: 24 },
-  sectionTitle: { fontFamily: 'texgyB', fontSize: 13, color: '#94a3b8', marginBottom: 12, letterSpacing: 1, paddingHorizontal: 4 },
-  insightCard: { flexDirection: 'row', backgroundColor: '#ffffff', borderRadius: 12, padding: 16, marginBottom: 10, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 4, elevation: 1 },
-  insightTitle: { fontFamily: 'texgyB', fontSize: 15, color: '#1e293b', marginBottom: 4 },
-  insightDesc: { fontFamily: 'texgyR', fontSize: 14, color: '#475569', lineHeight: 20 },
-  
-  qualityContainer: { gap: 8 },
-  qualityRow: { flexDirection: 'row', justifyContent: 'space-between' },
-  qualityLabel: { fontFamily: 'texgyR', fontSize: 14, color: '#64748b' },
-  qualityValue: { fontFamily: 'texgyB', fontSize: 14, color: '#334155' },
-  
-  disclaimer: { fontFamily: 'texgyR', fontSize: 12, color: '#94a3b8', textAlign: 'center', marginTop: 16, paddingHorizontal: 16, lineHeight: 18 }
+
+  /* Hero */
+  heroShadow: { borderRadius: 28, marginBottom: 16, shadowColor: '#1c1f75', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.35, shadowRadius: 18, elevation: 10 },
+  hero: { borderRadius: 28, overflow: 'hidden', backgroundColor: '#0a0d2e', position: 'relative' },
+  heroContent: { padding: 22 },
+  heroBgImage: { position: 'absolute', bottom: 0, left: 0 },
+  heroChip: { flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start', backgroundColor: 'rgba(255,255,255,0.16)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.22)', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 12 },
+  heroChipText: { fontFamily: 'texgyB', fontSize: 11, color: '#e0e7ff', textTransform: 'capitalize' },
+  heroCity: { fontFamily: 'texgyB', fontSize: 30, color: '#fff', marginTop: 14, textShadowColor: 'rgba(0,0,0,0.5)', textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 6 },
+  heroPop: { fontFamily: 'texgyR', fontSize: 13, color: '#c7d2fe', marginTop: 4 },
+  heroStats: { flexDirection: 'row', alignItems: 'center', marginTop: 22 },
+  heroStat: { flex: 1 },
+  heroStatValue: { fontFamily: 'texgyB', fontSize: 34, color: '#fff', textShadowColor: 'rgba(0,0,0,0.3)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 4 },
+  heroStatLabel: { fontFamily: 'texgyR', fontSize: 12, color: '#c7d2fe', marginTop: 2, lineHeight: 16 },
+  heroDivider: { width: 1, alignSelf: 'stretch', backgroundColor: 'rgba(255,255,255,0.22)', marginHorizontal: 16 },
+  verdictPill: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 20, backgroundColor: 'rgba(255,255,255,0.14)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.18)', borderRadius: 16, paddingVertical: 10, paddingHorizontal: 12 },
+  verdictDot: { width: 22, height: 22, borderRadius: 11, alignItems: 'center', justifyContent: 'center' },
+  verdictText: { flex: 1, fontFamily: 'texgyB', fontSize: 14, color: '#fff' },
+  verdictPct: { fontFamily: 'texgyB', fontSize: 14, color: '#c7d2fe' },
+
+  /* Card */
+  card: { backgroundColor: '#fff', borderRadius: 24, padding: 20, marginBottom: 16, shadowColor: '#0f172a', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.06, shadowRadius: 12, elevation: 2 },
+  cardHeader: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 18 },
+  cardIcon: { width: 34, height: 34, borderRadius: 12, backgroundColor: '#eef2ff', alignItems: 'center', justifyContent: 'center' },
+  cardTitle: { fontFamily: 'texgyB', fontSize: 17, color: '#0f172a' },
+  cardSubtitle: { fontFamily: 'texgyR', fontSize: 12, color: '#64748b', marginTop: 2 },
+  footnote: { fontFamily: 'texgyR', fontSize: 11, color: '#94a3b8', marginTop: 14 },
+
+  /* Summary */
+  summaryRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  summaryIcon: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center' },
+  summaryText: { flex: 1, fontFamily: 'texgyR', fontSize: 15, color: '#334155', lineHeight: 21 },
+
+  /* Gauge */
+  gaugeSection: { marginTop: 22, paddingTop: 18, borderTopWidth: 1, borderTopColor: '#f1f5f9' },
+  gaugeTitle: { fontFamily: 'texgyR', fontSize: 14, color: '#334155', lineHeight: 20, marginBottom: 12 },
+
+  /* Breakdown */
+  breakdownRow: { flexDirection: 'row', alignItems: 'center', gap: 18 },
+  legend: { flex: 1, gap: 12 },
+  legendItem: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  legendDot: { width: 10, height: 10, borderRadius: 5 },
+  legendLabel: { fontFamily: 'texgyB', fontSize: 13, color: '#1e293b' },
+  legendCount: { fontFamily: 'texgyR', fontSize: 11, color: '#94a3b8' },
+  legendPct: { fontFamily: 'texgyB', fontSize: 15, color: '#0f172a' },
+
+  /* Top crimes */
+  topRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  topRank: { width: 14, fontFamily: 'texgyB', fontSize: 13, color: '#94a3b8', textAlign: 'center' },
+  topIcon: { width: 28, height: 28, borderRadius: 9, alignItems: 'center', justifyContent: 'center' },
+  topName: { flex: 1, fontFamily: 'texgyB', fontSize: 14, color: '#1e293b' },
+  topCount: { fontFamily: 'texgyB', fontSize: 14, color: '#0f172a' },
+
+  /* Trend */
+  trendPill: { flexDirection: 'row', alignItems: 'center', gap: 8, alignSelf: 'center', backgroundColor: '#f8fafc', borderRadius: 14, paddingHorizontal: 12, paddingVertical: 8, marginTop: 8 },
+  trendText: { fontFamily: 'texgyB', fontSize: 13, color: '#334155' },
+
+  /* CTA */
+  ctaCard: { flexDirection: 'row', alignItems: 'center', gap: 14, backgroundColor: '#fff', borderRadius: 24, padding: 18, marginBottom: 16, borderWidth: 1, borderColor: '#e2e8f0', shadowColor: '#1c1f75', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.08, shadowRadius: 10, elevation: 3 },
+  ctaIcon: { width: 44, height: 44, borderRadius: 14, backgroundColor: '#eef2ff', alignItems: 'center', justifyContent: 'center' },
+  ctaTitle: { fontFamily: 'texgyB', fontSize: 15, color: '#0f172a' },
+  ctaText: { fontFamily: 'texgyR', fontSize: 12, color: '#64748b', marginTop: 2 },
+  ctaButton: { width: 42, height: 42, borderRadius: 21, backgroundColor: '#1c1f75', alignItems: 'center', justifyContent: 'center', shadowColor: '#1c1f75', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 4, elevation: 3 },
+
+  sources: { fontFamily: 'texgyR', fontSize: 11, color: '#94a3b8', textAlign: 'center', marginTop: 4, paddingHorizontal: 16, lineHeight: 16 },
+
+  /* Estados */
+  stateContainer: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 36, paddingBottom: 80 },
+  stateIcon: { width: 76, height: 76, borderRadius: 38, backgroundColor: '#eef2ff', alignItems: 'center', justifyContent: 'center', marginBottom: 18 },
+  stateTitle: { fontFamily: 'texgyB', fontSize: 19, color: '#0f172a', textAlign: 'center' },
+  stateText: { fontFamily: 'texgyR', fontSize: 14, color: '#64748b', textAlign: 'center', lineHeight: 21, marginTop: 8 },
+  stateButton: { marginTop: 20, backgroundColor: '#000', paddingHorizontal: 22, paddingVertical: 12, borderRadius: 22 },
+  stateButtonText: { fontFamily: 'texgyB', fontSize: 14, color: '#fff' },
 });

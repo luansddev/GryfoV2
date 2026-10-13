@@ -22,8 +22,8 @@ export const fetchCrimeDataForPeriod = async (month: number, year: number): Prom
   }
 };
 
-const CACHE: Record<string, RawCrimeData> = {};
-const PENDING_REQUESTS: Record<string, Promise<RawCrimeData | null>> = {};
+const CACHE: Record<string, RawCrimeData | undefined> = {};
+const PENDING_REQUESTS: Record<string, Promise<RawCrimeData | null> | undefined> = {};
 
 export const getCrimeData = async (month: number, year: number, forceRefresh: boolean = false): Promise<RawCrimeData | null> => {
   const cacheKey = `${month}-${year}`;

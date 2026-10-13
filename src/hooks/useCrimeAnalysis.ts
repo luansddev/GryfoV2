@@ -11,8 +11,17 @@ import {
   calculateCategoryShares,
   calculateDominantCategory,
   calculateDominantCrime,
-  calculateRatePer100k
+  calculateRatePer100k,
+  calculateTopCrimes,
+  calculateStateBenchmark
 } from '../services/analytics/MetricsEngine';
+import {
+  loadIbgeCities,
+  getIbgeCityForSspKey,
+  getCityDisplayName,
+  resolveSspKey,
+  NON_CITY_KEYS
+} from '../services/analytics/CityDirectory';
 
 export const useCrimeAnalysis = (normalizedCity: string | null) => {
   const [analysis, setAnalysis] = useState<AnalysisResult | null>(null);
@@ -37,12 +46,17 @@ export const useCrimeAnalysis = (normalizedCity: string | null) => {
       const history = await fetchAvailableHistory(forceRefresh);
       
       if (currentCityRef.current !== cityForThisRequest) return;
+
+      // Resolve variações de nome ("S. PAULO", "Santo André"...) para a chave exata da SSP
+      const latestAll = history.length > 0 ? history[history.length - 1].data : {};
+      const sspKeys = Object.keys(latestAll).filter(k => !NON_CITY_KEYS.includes(k));
+      const cityKey = resolveSspKey(cityForThisRequest, sspKeys) ?? cityForThisRequest;
       
       const cityHistory = history
         .map(h => ({
           year: h.year,
           month: h.month,
-          data: h.data[normalizedCity]
+          data: h.data[cityKey]
         }))
         .filter(h => h.data !== undefined); // Only periods where city has data
 
@@ -69,12 +83,27 @@ export const useCrimeAnalysis = (normalizedCity: string | null) => {
       const categories = calculateCategoryShares(categoryTotals, totalOccurrences);
       const dominantCategory = calculateDominantCategory(categories);
       const dominantCrime = calculateDominantCrime(currentData, totalOccurrences);
+      const topCrimes = calculateTopCrimes(currentData, totalOccurrences, 5);
+      const otherTotal = Math.max(
+        0,
+        totalOccurrences - categoryTotals.life - categoryTotals.physical - categoryTotals.patrimony
+      );
 
       // 2. Population & Rate
-      const population = await getPopulationForCity(normalizedCity);
+      const population = await getPopulationForCity(cityKey);
       const ratePer100k = calculateRatePer100k(totalOccurrences, population);
+      const ibge = await loadIbgeCities();
+      const displayName = getCityDisplayName(cityKey, ibge);
 
-      // 3. Trends
+      // 3. Comparação com o estado (mesmo período)
+      const periodAll = history.find(h => h.year === currentPeriod.year && h.month === currentPeriod.month)?.data ?? latestAll;
+      const benchmark = calculateStateBenchmark(
+        periodAll,
+        cityKey,
+        (key) => getIbgeCityForSspKey(key, ibge)?.population
+      );
+
+      // 4. Trends
       const monthlyTotals = cityHistory.map(h => ({
         year: h.year,
         month: h.month,
@@ -97,13 +126,17 @@ export const useCrimeAnalysis = (normalizedCity: string | null) => {
       };
 
       const partialAnalysis: Partial<AnalysisResult> = {
-        city: normalizedCity,
+        city: cityKey,
+        displayName,
         population,
         totalOccurrences,
         ratePer100k,
         categories,
+        otherTotal,
         dominantCategory,
         dominantCrime,
+        topCrimes,
+        benchmark,
         trend,
         dataQuality
       };
@@ -114,7 +147,7 @@ export const useCrimeAnalysis = (normalizedCity: string | null) => {
 
       const result: AnalysisResult = {
         ...partialAnalysis,
-        city: normalizedCity,
+        city: cityKey,
         totalOccurrences,
         categories,
         insights,
