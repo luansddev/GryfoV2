@@ -156,7 +156,7 @@ export default function Conta() {
           {/* Top Logo */}
           <View style={styles.topBar}>
             <Image 
-              source={require('../../assets/images/gardio_branco.png')} 
+              source={require('../../assets/images/gryfob.png')} 
               style={styles.logoImageSmall} 
               resizeMode="contain" 
             />
@@ -327,8 +327,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   logoImageSmall: {
-    width: 48,
-    height: 48,
+    width: 45.6,
+    height: 45.6,
   },
 
   profileSection: {

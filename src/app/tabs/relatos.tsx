@@ -115,7 +115,7 @@ export default function Relatos() {
 
   const [currentDeviceId, setCurrentDeviceId] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
-  const { searchMode, searchedCity, userCity } = useSearchLocation();
+  const { searchMode, searchedCity, userCity, setSearchedCity, setSearchMode, setLocation } = useSearchLocation();
   const { setIsCreatingVigia } = useVigiaCreation();
   const [uiMode, setUiMode] = useState<'idle' | 'creating_relato'>('idle');
   const [selectedRelatoId, setSelectedRelatoId] = useState<string | null>(null);
@@ -130,6 +130,24 @@ export default function Relatos() {
   const [activeDraftText, setActiveDraftText] = useState<string | null>(null);
   const [activeDraftCrime, setActiveDraftCrime] = useState<string | null>(null);
   const [activeDraftId, setActiveDraftId] = useState<string | undefined>(undefined);
+  const [showNoRelatosTooltip, setShowNoRelatosTooltip] = useState(false);
+
+  useEffect(() => {
+    if (showNoRelatosTooltip) {
+      const timer = setTimeout(() => setShowNoRelatosTooltip(false), 4500);
+      return () => clearTimeout(timer);
+    }
+  }, [showNoRelatosTooltip]);
+
+  useEffect(() => {
+    setShowNoRelatosTooltip(false);
+  }, [searchedCity, searchMode, userCity]);
+
+  useEffect(() => {
+    if (!loading && relatos.length === 0 && viewMode === 'list') {
+      setViewMode('map');
+    }
+  }, [loading, relatos.length, viewMode]);
 
   const superclusterLife = useRef(new Supercluster({ radius: 70, maxZoom: 18, minPoints: 2 })).current;
   const superclusterPhysical = useRef(new Supercluster({ radius: 70, maxZoom: 18, minPoints: 2 })).current;
@@ -533,33 +551,88 @@ export default function Relatos() {
     registerMapChildren('relatos', markersToRender);
   }, [visibleClusters, uiMode, searchedPoint, selectedPoint, registerMapChildren, handleClusterPress]);
 
-  useEffect(() => {
-    if (params.focusLat && params.focusLng) {
-      setViewMode('map');
-      setTimeout(() => {
-        mapRef.current?.animateToRegion({
-          latitude: parseFloat(params.focusLat as string),
-          longitude: parseFloat(params.focusLng as string),
-          latitudeDelta: 0.02,
-          longitudeDelta: 0.02,
-        });
-      }, 500);
-    }
-  }, [params.focusLat, params.focusLng]);
-
-  const [autoOpenedRelatoId, setAutoOpenedRelatoId] = useState<string | null>(null);
+  const lastProcessedTimestampRef = useRef<string | null>(null);
 
   useEffect(() => {
-    if (params.openRelatoId && typeof params.openRelatoId === 'string' && relatos.length > 0) {
-      if (autoOpenedRelatoId !== params.openRelatoId) {
-        const target = relatos.find(r => r.id === params.openRelatoId);
-        if (target) {
-          setSelectedClusterLeaves([target]);
-          setAutoOpenedRelatoId(params.openRelatoId);
+    if (params.focusTimestamp && params.focusTimestamp !== lastProcessedTimestampRef.current) {
+      lastProcessedTimestampRef.current = params.focusTimestamp as string;
+
+      if (params.focusLat && params.focusLng) {
+        setViewMode('map');
+        setTimeout(() => {
+          mapRef.current?.animateToRegion({
+            latitude: parseFloat(params.focusLat as string),
+            longitude: parseFloat(params.focusLng as string),
+            latitudeDelta: 0.02,
+            longitudeDelta: 0.02,
+          });
+        }, 500);
+      }
+
+      if (params.focusCidade && typeof params.focusCidade === 'string') {
+        const normCity = normalizarCidade(params.focusCidade);
+        setSearchedCity(normCity);
+        setSearchMode(true);
+        if (params.focusLat && params.focusLng) {
+          setLocation({
+            latitude: parseFloat(params.focusLat as string),
+            longitude: parseFloat(params.focusLng as string)
+          });
         }
       }
     }
-  }, [params.openRelatoId, relatos, autoOpenedRelatoId]);
+  }, [params.focusTimestamp, params.focusLat, params.focusLng, params.focusCidade, setSearchedCity, setSearchMode, setLocation]);
+
+  const lastOpenedRelatoTimestampRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (
+      params.openRelatoId &&
+      typeof params.openRelatoId === 'string' &&
+      params.focusTimestamp &&
+      params.focusTimestamp !== lastOpenedRelatoTimestampRef.current &&
+      relatos.length > 0
+    ) {
+      const target = relatos.find(r => r.id === params.openRelatoId);
+      if (target) {
+        lastOpenedRelatoTimestampRef.current = params.focusTimestamp as string;
+        const targetNature = getRelatoNature(target.crimeKey);
+        if (targetNature !== mapFilter) {
+          setMapFilter(targetNature);
+        }
+        setSelectedClusterLeaves([target]);
+      }
+    }
+  }, [params.openRelatoId, params.focusTimestamp, relatos, mapFilter]);
+
+  const prevSearchModeRef = useRef(searchMode);
+  useEffect(() => {
+    if (prevSearchModeRef.current && !searchMode) {
+      setSelectedRelatoId(null);
+      setSelectedClusterLeaves(null);
+      setShowNoRelatosTooltip(false);
+
+      const targetLoc = userLocation || sharedUserLocation;
+      if (targetLoc) {
+        mapRef.current?.animateToRegion({
+          latitude: targetLoc.coords.latitude,
+          longitude: targetLoc.coords.longitude,
+          latitudeDelta: 0.08,
+          longitudeDelta: 0.08,
+        });
+      } else {
+        Location.getCurrentPositionAsync({}).then(loc => {
+          mapRef.current?.animateToRegion({
+            latitude: loc.coords.latitude,
+            longitude: loc.coords.longitude,
+            latitudeDelta: 0.08,
+            longitudeDelta: 0.08,
+          });
+        }).catch(() => {});
+      }
+    }
+    prevSearchModeRef.current = searchMode;
+  }, [searchMode, userLocation, sharedUserLocation]);
 
   useEffect(() => {
     let deviceId = '';
@@ -660,13 +733,6 @@ export default function Relatos() {
                   Aguardando pesquisa de cidade...
                 </Text>
               </View>
-            ) : relatos.length === 0 ? (
-              <View style={{ alignItems: 'center', marginTop: 80 }}>
-                <FontAwesome6 name="inbox" size={48} color="#cbd5e1" />
-                <Text style={{ marginTop: 16, fontSize: 16, color: '#64748b', fontWeight: '500' }}>
-                  Nenhum relato encontrado nesta região.
-                </Text>
-              </View>
             ) : (
               filteredRelatos.map((relato, index) => (
                 <RelatoItem 
@@ -693,97 +759,144 @@ export default function Relatos() {
 
       {/* CONTROLES INFERIORES */}
       {uiMode === 'idle' && (
-        <View style={styles.idleControls} pointerEvents="box-none">
-          {viewMode === 'map' && (
-          <View style={styles.fabRow}>
+        <>
+          {showNoRelatosTooltip && (
             <TouchableOpacity
-              style={styles.locationFab}
-              onPress={() => {
-                if (userLocation) {
-                  mapRef.current?.animateToRegion({
-                    latitude: userLocation.coords.latitude,
-                    longitude: userLocation.coords.longitude,
-                    latitudeDelta: 0.08,
-                    longitudeDelta: 0.08,
-                  });
-                }
-              }}
-            >
-              <FontAwesome6 name="location-crosshairs" size={14} color="#333" />
-              <Text style={styles.locationFabText}>Meu local</Text>
-            </TouchableOpacity>
+              style={StyleSheet.absoluteFill}
+              activeOpacity={1}
+              onPress={() => setShowNoRelatosTooltip(false)}
+            />
+          )}
 
-            {(() => {
-              const currentNature = mapNatureOptions.find(opt => opt.id === mapFilter) || mapNatureOptions[0];
-              return (
+          <View style={styles.idleControls} pointerEvents="box-none">
+            {viewMode === 'map' && (
+            <View style={styles.fabRow}>
+              <TouchableOpacity
+                style={styles.locationFab}
+                onPress={() => {
+                  if (userLocation) {
+                    mapRef.current?.animateToRegion({
+                      latitude: userLocation.coords.latitude,
+                      longitude: userLocation.coords.longitude,
+                      latitudeDelta: 0.08,
+                      longitudeDelta: 0.08,
+                    });
+                  }
+                }}
+              >
+                <FontAwesome6 name="location-crosshairs" size={14} color="#333" />
+                <Text style={styles.locationFabText}>Meu local</Text>
+              </TouchableOpacity>
+
+              {(() => {
+                const currentNature = mapNatureOptions.find(opt => opt.id === mapFilter) || mapNatureOptions[0];
+                return (
+                  <TouchableOpacity
+                    style={styles.filterIconBtn}
+                    onPress={() => setIsFilterModalOpen(true)}
+                    activeOpacity={0.8}
+                  >
+                    <FontAwesome6 name={currentNature.icon as any} size={14} color={currentNature.color} style={{ marginRight: 6 }} />
+                    <FontAwesome6 name="chevron-down" size={10} color="#64748b" />
+                  </TouchableOpacity>
+                );
+              })()}
+            </View>
+          )}
+
+          <View style={{ alignItems: 'center', position: 'relative' }}>
+            {showNoRelatosTooltip && (
+              <Animated.View
+                entering={FadeInUp.duration(200)}
+                exiting={FadeOut.duration(200)}
+                style={styles.noRelatosTooltip}
+              >
                 <TouchableOpacity
-                  style={styles.filterIconBtn}
-                  onPress={() => setIsFilterModalOpen(true)}
-                  activeOpacity={0.8}
+                  activeOpacity={0.9}
+                  onPress={() => setShowNoRelatosTooltip(false)}
                 >
-                  <FontAwesome6 name={currentNature.icon as any} size={14} color={currentNature.color} style={{ marginRight: 6 }} />
-                  <FontAwesome6 name="chevron-down" size={10} color="#64748b" />
+                  <Text style={styles.noRelatosTooltipText}>
+                    Não há relatos nesta região.
+                  </Text>
                 </TouchableOpacity>
-              );
-            })()}
-          </View>
-        )}
+                <View style={styles.noRelatosTooltipArrow} />
+              </Animated.View>
+            )}
 
-        <View style={styles.actionContainer}>
-          <TouchableOpacity
-            style={styles.actionBtn}
-            onPress={() => {
-              setUiMode('creating_relato');
-              setIsCreatingVigia(true);
-              setCreatingStep('picking');
-              setSelectedPoint(null);
-              setSelectedAddress(null);
-              setLoadingAddress(false);
-              setSearchedPoint(null);
-              setSearchText('');
-              setSearchResults([]);
-              if (viewMode === 'list') setViewMode('map');
-            }}
-            activeOpacity={0.8}
-          >
-            <View style={styles.actionBtnIconWrap}>
-              <FontAwesome6 name="plus" size={14} color="#2563eb" />
-            </View>
-            <Text style={styles.actionBtnText}>Criar relato</Text>
-          </TouchableOpacity>
-
-          <View style={styles.actionDivider} />
-
-          <TouchableOpacity
-            style={styles.actionBtn}
-            onPress={() => setViewMode(viewMode === 'map' ? 'list' : 'map')}
-            activeOpacity={0.8}
-          >
-            <View style={[styles.actionBtnIconWrap, { backgroundColor: 'rgba(16, 185, 129, 0.1)' }]}>
-              <FontAwesome6 name={viewMode === 'map' ? "list" : "map"} size={14} color="#10b981" />
-              {viewMode === 'map' && relatos.length > 0 && (
-                <View style={[styles.countBadge, { backgroundColor: '#10b981' }]}>
-                  <Text style={styles.countBadgeText}>{relatos.length}</Text>
+            <View style={styles.actionContainer}>
+              <TouchableOpacity
+                style={styles.actionBtn}
+                onPress={() => {
+                  setShowNoRelatosTooltip(false);
+                  setUiMode('creating_relato');
+                  setIsCreatingVigia(true);
+                  setCreatingStep('picking');
+                  setSelectedPoint(null);
+                  setSelectedAddress(null);
+                  setLoadingAddress(false);
+                  setSearchedPoint(null);
+                  setSearchText('');
+                  setSearchResults([]);
+                  if (viewMode === 'list') setViewMode('map');
+                }}
+                activeOpacity={0.8}
+              >
+                <View style={styles.actionBtnIconWrap}>
+                  <FontAwesome6 name="plus" size={14} color="#2563eb" />
                 </View>
-              )}
-            </View>
-            <Text style={styles.actionBtnText}>{viewMode === 'map' ? "Ver relatos" : "Ver mapa"}</Text>
-          </TouchableOpacity>
+                <Text style={styles.actionBtnText}>Criar relato</Text>
+              </TouchableOpacity>
 
-          <View style={styles.actionDivider} />
+              <View style={styles.actionDivider} />
 
-          <TouchableOpacity
-            style={styles.actionBtn}
-            onPress={() => router.push('/biblioteca')}
-            activeOpacity={0.8}
-          >
-            <View style={[styles.actionBtnIconWrap, { backgroundColor: 'rgba(71, 85, 105, 0.1)' }]}>
-              <FontAwesome6 name="book-bookmark" size={14} color="#475569" />
+              <TouchableOpacity
+                style={styles.actionBtn}
+                onPress={() => {
+                  if (viewMode === 'map') {
+                    if (loading) return;
+                    if (relatos.length === 0) {
+                      setShowNoRelatosTooltip(prev => !prev);
+                      return;
+                    }
+                    setShowNoRelatosTooltip(false);
+                    setViewMode('list');
+                  } else {
+                    setShowNoRelatosTooltip(false);
+                    setViewMode('map');
+                  }
+                }}
+                activeOpacity={0.8}
+              >
+                <View style={[styles.actionBtnIconWrap, { backgroundColor: 'rgba(16, 185, 129, 0.1)' }]}>
+                  <FontAwesome6 name={viewMode === 'map' ? "list" : "map"} size={14} color="#10b981" />
+                  {viewMode === 'map' && relatos.length > 0 && (
+                    <View style={[styles.countBadge, { backgroundColor: '#10b981' }]}>
+                      <Text style={styles.countBadgeText}>{relatos.length}</Text>
+                    </View>
+                  )}
+                </View>
+                <Text style={styles.actionBtnText}>{viewMode === 'map' ? "Ver relatos" : "Ver mapa"}</Text>
+              </TouchableOpacity>
+
+              <View style={styles.actionDivider} />
+
+              <TouchableOpacity
+                style={styles.actionBtn}
+                onPress={() => {
+                  setShowNoRelatosTooltip(false);
+                  router.push('/biblioteca');
+                }}
+                activeOpacity={0.8}
+              >
+                <View style={[styles.actionBtnIconWrap, { backgroundColor: 'rgba(71, 85, 105, 0.1)' }]}>
+                  <FontAwesome6 name="book-bookmark" size={14} color="#475569" />
+                </View>
+                <Text style={styles.actionBtnText}>Biblioteca</Text>
+              </TouchableOpacity>
             </View>
-            <Text style={styles.actionBtnText}>Biblioteca</Text>
-          </TouchableOpacity>
+          </View>
         </View>
-      </View>
+      </>
       )}
 
       {uiMode === 'creating_relato' && (
@@ -1571,6 +1684,41 @@ const styles = StyleSheet.create({
   filterModalNatureMenuTextActive: {
     fontFamily: 'texgyB',
     color: '#000',
-  }
+  },
+  noRelatosTooltip: {
+    position: 'absolute',
+    bottom: '100%',
+    marginBottom: 10,
+    backgroundColor: '#1f2937',
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 12,
+    zIndex: 100,
+    elevation: 10,
+    shadowColor: '#000',
+    shadowOpacity: 0.25,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    alignItems: 'center',
+    justifyContent: 'center',
+    minWidth: 190,
+  },
+  noRelatosTooltipText: {
+    color: '#fff',
+    fontSize: 12,
+    lineHeight: 18,
+    fontFamily: 'texgyR',
+    textAlign: 'center',
+  },
+  noRelatosTooltipArrow: {
+    position: 'absolute',
+    bottom: -5,
+    left: '50%',
+    marginLeft: -6,
+    width: 12,
+    height: 12,
+    backgroundColor: '#1f2937',
+    transform: [{ rotate: '45deg' }],
+  },
 });
 

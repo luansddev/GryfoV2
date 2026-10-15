@@ -50,8 +50,9 @@
     "extra": {
       "router": {},
       "eas": {
-        "projectId": "7a03be82-fa44-41cd-badf-87d7556a6f38"
+        "projectId": "42a44eb4-7989-413b-8e5a-03051b74eb79"
       }
-    }
+    },
+    "owner": "luasndev"
   }
 }

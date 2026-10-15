@@ -16,6 +16,8 @@ import RelatoItem from '../components/RelatoItem';
 import RascunhoItem from '../components/RascunhoItem';
 import AddRelatoModal from '../components/AddRelatoModal';
 import TabTransitionView from '../components/TabTransitionView';
+import { useSearchLocation } from '../context/SearchLocationContext';
+import { normalizarCidade } from '../context/Normalizer';
 
 const AnimatedTouchableOpacity = Animated.createAnimatedComponent(TouchableOpacity);
 
@@ -28,6 +30,7 @@ function Spacer() {
 
 const MeusRelatos = () => {
   const router = useRouter();
+  const { setSearchMode, setSearchedCity, setLocation } = useSearchLocation();
   const [relatos, setRelatos] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [currentDeviceId, setCurrentDeviceId] = useState<string | null>(null);
@@ -105,9 +108,24 @@ const MeusRelatos = () => {
               index={index}
               showCityHeader={true}
               onViewOnMap={(r) => {
+                if (r.cidade) {
+                  const normCity = normalizarCidade(r.cidade);
+                  setSearchedCity(normCity);
+                  setSearchMode(true);
+                  if (r.latitude && r.longitude) {
+                    setLocation({ latitude: r.latitude, longitude: r.longitude });
+                  }
+                }
                 router.push({
                   pathname: '/home',
-                  params: { focusLat: r.latitude, focusLng: r.longitude, switchTab: 'relatos' }
+                  params: {
+                    focusLat: r.latitude,
+                    focusLng: r.longitude,
+                    switchTab: 'relatos',
+                    focusCidade: r.cidade,
+                    openRelatoId: r.id,
+                    focusTimestamp: Date.now().toString()
+                  }
                 });
               }}
             />
@@ -232,6 +250,7 @@ const Rascunhos = () => {
 
 const Salvos = () => {
   const router = useRouter();
+  const { setSearchMode, setSearchedCity, setLocation } = useSearchLocation();
   const [relatos, setRelatos] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [currentDeviceId, setCurrentDeviceId] = useState<string | null>(null);
@@ -309,9 +328,24 @@ const Salvos = () => {
               index={index}
               showCityHeader={true}
               onViewOnMap={(r) => {
+                if (r.cidade) {
+                  const normCity = normalizarCidade(r.cidade);
+                  setSearchedCity(normCity);
+                  setSearchMode(true);
+                  if (r.latitude && r.longitude) {
+                    setLocation({ latitude: r.latitude, longitude: r.longitude });
+                  }
+                }
                 router.push({
                   pathname: '/home',
-                  params: { focusLat: r.latitude, focusLng: r.longitude, switchTab: 'relatos' }
+                  params: {
+                    focusLat: r.latitude,
+                    focusLng: r.longitude,
+                    switchTab: 'relatos',
+                    focusCidade: r.cidade,
+                    openRelatoId: r.id,
+                    focusTimestamp: Date.now().toString()
+                  }
                 });
               }}
             />

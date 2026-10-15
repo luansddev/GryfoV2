@@ -71,6 +71,7 @@ export default function CitySearchBar() {
   const switchToLocation = () => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     setSearchMode(false);
+    setSearchedCity(null);
     setFocused(false);
     Keyboard.dismiss();
   };

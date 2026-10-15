@@ -18,6 +18,12 @@ export default function TopMenu({ renderTabBar }: { renderTabBar?: () => React.R
     fetchValidCities();
   }, []);
 
+  useEffect(() => {
+    if (searchedCity) {
+      setSearchText(formatCity(searchedCity));
+    }
+  }, [searchedCity]);
+
   const fetchValidCities = async () => {
     try {
       const res = await fetch('https://gryfocorp.web.app/ssp-2-2026.json');
@@ -114,6 +120,8 @@ export default function TopMenu({ renderTabBar }: { renderTabBar?: () => React.R
               onPress={() => {
                 LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
                 setSearchMode(false);
+                setSearchedCity(null);
+                setSearchText('');
               }}
               activeOpacity={0.8}
             >
@@ -150,7 +158,7 @@ export default function TopMenu({ renderTabBar }: { renderTabBar?: () => React.R
                   }}
                   onSubmitEditing={() => handleSearch()}
                   returnKeyType="search"
-                  autoFocus={true}
+                  autoFocus={false}
                 />
                 {searchText.length > 0 && (
                   <TouchableOpacity onPress={() => setSearchText('')} style={styles.clearButton}>

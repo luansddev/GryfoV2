@@ -9,7 +9,10 @@ import {
   RefreshControl,
   Keyboard,
   Dimensions,
+  ActivityIndicator,
 } from 'react-native';
+import * as Location from 'expo-location';
+import { normalizarCidade } from '../context/Normalizer';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { FontAwesome6 } from '@expo/vector-icons';
@@ -57,16 +60,18 @@ function Card({
 }: {
   title: string;
   subtitle?: string;
-  icon: string;
+  icon?: string;
   delay?: number;
   children: React.ReactNode;
 }) {
   return (
     <Animated.View entering={FadeInDown.delay(delay).duration(450)} style={styles.card}>
       <View style={styles.cardHeader}>
-        <View style={styles.cardIcon}>
-          <FontAwesome6 name={icon as any} size={13} color="#1c1f75" />
-        </View>
+        {icon ? (
+          <View style={styles.cardIcon}>
+            <FontAwesome6 name={icon as any} size={13} color="#1c1f75" />
+          </View>
+        ) : null}
         <View style={{ flex: 1 }}>
           <Text style={styles.cardTitle}>{title}</Text>
           {subtitle ? <Text style={styles.cardSubtitle}>{subtitle}</Text> : null}
@@ -278,7 +283,11 @@ function Summary({ analysis }: { analysis: AnalysisResult }) {
   if (items.length === 0) return null;
 
   return (
-    <Card title="Em resumo" icon="bolt" delay={80}>
+    <Card
+      title="Em resumo"
+      subtitle="Principais destaques da região"
+      delay={80}
+    >
       <View style={{ gap: 12 }}>
         {items.map((item, i) => (
           <View key={i} style={styles.summaryRow}>
@@ -512,10 +521,67 @@ function VigiaCta({ analysis }: { analysis: AnalysisResult }) {
 
 export default function Analise() {
   const insets = useSafeAreaInsets();
-  const { searchMode, userCity, searchedCity } = useSearchLocation();
+  const { searchMode, userCity, setUserCity, searchedCity, setLocation } = useSearchLocation();
   const activeCity = searchMode ? searchedCity : userCity;
   const { analysis, loading, error, refresh } = useCrimeAnalysis(activeCity);
   const [refreshing, setRefreshing] = useState(false);
+  const [locationLoading, setLocationLoading] = useState(!userCity && !searchMode);
+
+  // Garante a busca da localização do usuário caso ainda não esteja disponível
+  useEffect(() => {
+    if (userCity || searchMode) {
+      setLocationLoading(false);
+      return;
+    }
+
+    let isMounted = true;
+    setLocationLoading(true);
+
+    const detectLocation = async () => {
+      try {
+        const { status } = await Location.requestForegroundPermissionsAsync();
+        if (status !== 'granted') {
+          if (isMounted) setLocationLoading(false);
+          return;
+        }
+
+        const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+        if (!isMounted) return;
+
+        setLocation({
+          latitude: loc.coords.latitude,
+          longitude: loc.coords.longitude,
+        });
+
+        const geoRes = await fetch(
+          `https://nominatim.openstreetmap.org/reverse?lat=${loc.coords.latitude}&lon=${loc.coords.longitude}&format=json&accept-language=pt-BR`,
+          { headers: { 'User-Agent': 'Gardio/1.0' } }
+        );
+        const geoJson = await geoRes.json();
+        const nomeEncontrado =
+          geoJson?.address?.city ||
+          geoJson?.address?.town ||
+          geoJson?.address?.municipality ||
+          geoJson?.address?.state;
+
+        if (nomeEncontrado && isMounted) {
+          setUserCity(normalizarCidade(nomeEncontrado));
+        }
+      } catch (err) {
+        console.warn('Erro ao obter localização em Análise:', err);
+      } finally {
+        if (isMounted) {
+          setLocationLoading(false);
+        }
+      }
+    };
+
+    detectLocation();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [userCity, searchMode]);
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -526,7 +592,27 @@ export default function Analise() {
     }
   };
 
+  const isLoading = (locationLoading || loading) && !refreshing;
+
   const renderBody = () => {
+    if (isLoading) {
+      return (
+        <Animated.View entering={FadeInDown.duration(350)} style={styles.loadingContainer}>
+          <View style={styles.loadingCard}>
+            <ActivityIndicator size="large" color="#1c1f75" />
+            <Text style={styles.loadingTitle}>
+              {locationLoading && !activeCity ? 'Identificando sua localização...' : 'Carregando análise...'}
+            </Text>
+            <Text style={styles.loadingSubtitle}>
+              {locationLoading && !activeCity
+                ? 'Obtendo a sua região para exibir os dados'
+                : 'Buscando estatísticas e índices de segurança'}
+            </Text>
+          </View>
+        </Animated.View>
+      );
+    }
+
     if (!activeCity) {
       return (
         <StateMessage
@@ -538,16 +624,6 @@ export default function Analise() {
               : 'Não conseguimos identificar sua localização. Pesquise uma cidade na barra acima.'
           }
         />
-      );
-    }
-
-    if (loading && !refreshing) {
-      return (
-        <View style={styles.scrollContent}>
-          <SkeletonBlock height={230} />
-          <SkeletonBlock height={170} />
-          <SkeletonBlock height={200} />
-        </View>
       );
     }
 
@@ -604,7 +680,6 @@ export default function Analise() {
       <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
         <View style={styles.headerTitleRow}>
           <Text style={styles.headerTitle}>Análise</Text>
-          <Text style={styles.headerSubtitle}>Segurança nas cidades de SP</Text>
         </View>
         <CitySearchBar />
       </View>
@@ -634,11 +709,30 @@ const styles = StyleSheet.create({
     elevation: 8,
     zIndex: 10,
   },
-  headerTitleRow: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 12, paddingHorizontal: 4 },
+  headerTitleRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 12, paddingHorizontal: 4 },
   headerTitle: { fontFamily: 'texgyB', fontSize: 26, color: '#000' },
-  headerSubtitle: { fontFamily: 'texgyR', fontSize: 12, color: '#64748b' },
 
   scrollContent: { paddingHorizontal: 16, paddingTop: 20 },
+
+  /* Loading */
+  loadingContainer: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 24, paddingBottom: 60 },
+  loadingCard: {
+    backgroundColor: '#fff',
+    borderRadius: 24,
+    paddingVertical: 32,
+    paddingHorizontal: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#1c1f75',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.1,
+    shadowRadius: 16,
+    elevation: 4,
+    width: '100%',
+    maxWidth: 320,
+  },
+  loadingTitle: { fontFamily: 'texgyB', fontSize: 16, color: '#0f172a', marginTop: 18, textAlign: 'center' },
+  loadingSubtitle: { fontFamily: 'texgyR', fontSize: 13, color: '#64748b', marginTop: 6, textAlign: 'center', lineHeight: 18 },
 
   /* Hero */
   heroShadow: { borderRadius: 28, marginBottom: 16, shadowColor: '#1c1f75', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.35, shadowRadius: 18, elevation: 10 },
@@ -661,16 +755,24 @@ const styles = StyleSheet.create({
 
   /* Card */
   card: { backgroundColor: '#fff', borderRadius: 24, padding: 20, marginBottom: 16, shadowColor: '#0f172a', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.06, shadowRadius: 12, elevation: 2 },
-  cardHeader: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 18 },
-  cardIcon: { width: 34, height: 34, borderRadius: 12, backgroundColor: '#eef2ff', alignItems: 'center', justifyContent: 'center' },
-  cardTitle: { fontFamily: 'texgyB', fontSize: 17, color: '#0f172a' },
+  cardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingBottom: 14,
+    marginBottom: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f1f5f9',
+  },
+  cardIcon: { width: 36, height: 36, borderRadius: 12, backgroundColor: '#eef2ff', alignItems: 'center', justifyContent: 'center' },
+  cardTitle: { fontFamily: 'texgyB', fontSize: 18, color: '#0f172a' },
   cardSubtitle: { fontFamily: 'texgyR', fontSize: 12, color: '#64748b', marginTop: 2 },
   footnote: { fontFamily: 'texgyR', fontSize: 11, color: '#94a3b8', marginTop: 14 },
 
   /* Summary */
   summaryRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  summaryIcon: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center' },
-  summaryText: { flex: 1, fontFamily: 'texgyR', fontSize: 15, color: '#334155', lineHeight: 21 },
+  summaryIcon: { width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
+  summaryText: { flex: 1, fontFamily: 'texgyR', fontSize: 14.5, color: '#334155', lineHeight: 21 },
 
   /* Gauge */
   gaugeSection: { marginTop: 22, paddingTop: 18, borderTopWidth: 1, borderTopColor: '#f1f5f9' },

@@ -126,25 +126,34 @@ const categoryOptions = [
 
 /* ================= MARCADORES MEMOIZADOS ================= */
 
-const CRIME_MARKER_IMAGES: Record<string, number> = {
-  life: require('../../../assets/markers/crime-life.png'),
-  physical: require('../../../assets/markers/crime-physical.png'),
-  patrimony: require('../../../assets/markers/crime-patrimony.png'),
+const CRIME_COLORS: Record<string, string> = {
+  life: '#000000',
+  physical: '#dc2626',
+  patrimony: '#64748b',
 };
 
 const CrimeMarker = React.memo(({ feature, mapFilter }: { feature: any; mapFilter: string }) => {
   const [longitude, latitude] = feature.geometry.coordinates;
+  const markerColor = CRIME_COLORS[mapFilter] || '#000000';
 
   return (
     <Marker
       coordinate={{ latitude, longitude }}
-      title={feature.properties.title}
+      title={feature.properties?.title}
       anchor={{ x: 0.5, y: 0.5 }}
+      tracksViewChanges={false}
     >
-      <Image
-        source={CRIME_MARKER_IMAGES[mapFilter]}
-        style={{ width: 24, height: 24 }}
-      />
+      <View style={styles.crimeDiamondWrapper} collapsable={false}>
+        <Svg width={20} height={20} viewBox="0 0 20 20">
+          <Path
+            d="M10 2.5 L17.5 10 L10 17.5 L2.5 10 Z"
+            fill={markerColor}
+            stroke="#ffffff"
+            strokeWidth={1.5}
+            strokeLinejoin="round"
+          />
+        </Svg>
+      </View>
     </Marker>
   );
 });
@@ -160,7 +169,7 @@ const ClusterMarker = React.memo(({ cluster, mapFilter, onPress }: { cluster: an
     if (tracksViewChanges) {
       const timer = setTimeout(() => {
         setTracksViewChanges(false);
-      }, 500);
+      }, 300);
       return () => clearTimeout(timer);
     }
   }, [tracksViewChanges]);
@@ -172,7 +181,7 @@ const ClusterMarker = React.memo(({ cluster, mapFilter, onPress }: { cluster: an
       style={{ zIndex: cluster.properties.point_count + 1 }}
       tracksViewChanges={tracksViewChanges}
     >
-      <View style={styles.clusterContainer}>
+      <View style={styles.clusterContainer} collapsable={false}>
         <View style={[styles.clusterHalo, { backgroundColor: bgColor }]} />
         <View style={[styles.clusterCircle, { backgroundColor: bgColor }]}>
           <Text style={styles.clusterText}>{cluster.properties.point_count}</Text>
@@ -233,6 +242,7 @@ export default function Dados() {
   });
 
   const [visibleClusters, setVisibleClusters] = useState<any[]>([]);
+  const [clusterVersion, setClusterVersion] = useState(0);
   const [markersVisible, setMarkersVisible] = useState(true);
   const [cityName, setCityName] = useState<string>('Localizando...');
 
@@ -388,9 +398,11 @@ export default function Dados() {
       if (selectedSubFilters.length > 0 && !selectedSubFilters.includes(key)) return;
       dadosCidade[key]?.localizacoes?.forEach((loc: any, idx: number) => {
         if (Number.isFinite(loc.latitude) && Number.isFinite(loc.longitude) && Math.abs(loc.latitude) <= 90 && Math.abs(loc.longitude) <= 180) {
+          const pointId = `${mapFilter}-${key}-${idx}-${loc.latitude.toFixed(5)}-${loc.longitude.toFixed(5)}`;
           newPoints.push({
             type: 'Feature',
-            properties: { id: `${mapFilter}-${key}-${idx}`, crime: key, title: formatCrimeName(key), cluster: false },
+            id: pointId,
+            properties: { id: pointId, crime: key, title: formatCrimeName(key), cluster: false },
             geometry: { type: 'Point', coordinates: [loc.longitude, loc.latitude] }
           });
         }
@@ -422,7 +434,9 @@ export default function Dados() {
     
     if (sharedRegion.longitudeDelta <= 0) zoom = 18;
 
-    setVisibleClusters(superclusterIndex.getClusters(bbox, zoom));
+    const clusters = superclusterIndex.getClusters(bbox, zoom);
+    setClusterVersion(v => (v + 1) % 1000000);
+    setVisibleClusters(clusters);
   }, [sharedRegion, superclusterIndex]);
 
   useEffect(() => {
@@ -439,18 +453,26 @@ export default function Dados() {
   }, [superclusterIndex, mapRef]);
 
   useEffect(() => {
+    return () => {
+      registerMapChildren('dados', <></>);
+    };
+  }, [registerMapChildren]);
+
+  useEffect(() => {
     if (!markersVisible) {
       registerMapChildren('dados', <></>);
       return;
     }
 
-    const markersToRender = visibleClusters.map(c => {
+    const markersToRender = visibleClusters.map((c, idx) => {
       const isCluster = c.properties?.cluster;
+      const keyId = isCluster ? `cluster-${c.id}` : `marker-${c.properties?.id || c.id || idx}`;
+      const markerKey = `dados-${mapFilter}-v${clusterVersion}-${keyId}`;
       
       if (isCluster) {
         return (
           <ClusterMarker 
-            key={`dados-${mapFilter}-cluster-${c.id}`} 
+            key={markerKey} 
             cluster={c} 
             mapFilter={mapFilter} 
             onPress={() => handleClusterPress(c.id as number, c.geometry.coordinates[1], c.geometry.coordinates[0])}
@@ -459,14 +481,14 @@ export default function Dados() {
       }
       return (
         <CrimeMarker 
-          key={`dados-${mapFilter}-marker-${c.properties.id || `${c.properties.crime}-${c.geometry.coordinates[1]}-${c.geometry.coordinates[0]}`}`} 
+          key={markerKey} 
           feature={c} 
           mapFilter={mapFilter} 
         />
       );
     });
-    registerMapChildren('dados', <>{markersToRender}</>);
-  }, [visibleClusters, mapFilter, registerMapChildren, handleClusterPress, markersVisible]);
+    registerMapChildren('dados', <React.Fragment key={`dados-batch-${mapFilter}-${clusterVersion}`}>{markersToRender}</React.Fragment>);
+  }, [visibleClusters, mapFilter, registerMapChildren, handleClusterPress, markersVisible, clusterVersion]);
 
   // Hide markers and clear the map as soon as the filter changes
   useEffect(() => {
@@ -477,6 +499,7 @@ export default function Dados() {
     registerMapChildren('dados', <></>);
     // Reset supercluster points to avoid leftover markers from previous filter
     superclusterIndex.load([]);
+    setClusterVersion(v => (v + 1) % 1000000);
   }, [mapFilter]);
 
   // Once the new clusters are ready, make the markers visible again
@@ -1738,6 +1761,12 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontWeight: 'bold',
     fontSize: 14,
+  },
+  crimeDiamondWrapper: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: 24,
+    height: 24,
   },
 
   /* ================= FOLHA RETRÁTIL (CARDS CONTAINER) ================= */

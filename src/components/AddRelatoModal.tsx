@@ -16,6 +16,7 @@ import {
 } from 'react-native';
 import { FontAwesome6 } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import Animated, { FadeInUp, FadeOut } from 'react-native-reanimated';
 import { mapNatureOptions, formatCrimeName, getCrimeIcon } from '../constants/CrimeData';
 import { db, auth } from '../config/firebaseConfig';
 import { collection, addDoc, serverTimestamp, doc, updateDoc, deleteDoc } from 'firebase/firestore';
@@ -54,6 +55,14 @@ export default function AddRelatoModal({ visible, onClose, draftData, draftId, i
   const targetCityNormalized = normalizarCidade(initialCityName || userCity || 'São Paulo');
   const userCityNormalized = normalizarCidade(userCity || 'São Paulo');
   const isVisitor = targetCityNormalized !== userCityNormalized;
+  const [showVisitorTooltip, setShowVisitorTooltip] = useState(false);
+
+  useEffect(() => {
+    if (showVisitorTooltip) {
+      const timer = setTimeout(() => setShowVisitorTooltip(false), 4500);
+      return () => clearTimeout(timer);
+    }
+  }, [showVisitorTooltip]);
 
   useEffect(() => {
     if (visible) {
@@ -61,6 +70,7 @@ export default function AddRelatoModal({ visible, onClose, draftData, draftId, i
       setSelectedCrime(draftData?.crimeKey || null);
       setIsKeyboardVisible(false);
       setKeyboardHeight(0);
+      setShowVisitorTooltip(false);
     }
   }, [visible, draftData]);
 
@@ -90,6 +100,7 @@ export default function AddRelatoModal({ visible, onClose, draftData, draftId, i
   const handleClose = () => {
     Keyboard.dismiss();
     setShowOptions(false);
+    setShowVisitorTooltip(false);
     setIsSelectingCrime(false);
     onClose();
   };
@@ -99,6 +110,7 @@ export default function AddRelatoModal({ visible, onClose, draftData, draftId, i
     setText('');
     setSelectedCrime(null);
     setShowOptions(false);
+    setShowVisitorTooltip(false);
     onClose();
   };
 
@@ -204,10 +216,16 @@ export default function AddRelatoModal({ visible, onClose, draftData, draftId, i
   };
 
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={handleClose}>
+    <Modal 
+      visible={visible} 
+      transparent 
+      animationType="fade" 
+      onRequestClose={isSelectingCrime ? () => setIsSelectingCrime(false) : handleClose}
+    >
       <View style={{ flex: 1 }}>
         <TouchableWithoutFeedback onPress={() => {
           if (showOptions) setShowOptions(false);
+          if (showVisitorTooltip) setShowVisitorTooltip(false);
           Keyboard.dismiss();
         }}>
           <View style={[
@@ -221,9 +239,40 @@ export default function AddRelatoModal({ visible, onClose, draftData, draftId, i
               
               {/* Header */}
               <View style={styles.header}>
-                <Text style={styles.title}>
-                  {isKeyboardVisible ? 'Relato' : 'Novo Relato'}
-                </Text>
+                <View style={styles.headerTitleContainer}>
+                  <Text style={styles.title}>
+                    {isKeyboardVisible ? 'Relato' : 'Novo Relato'}
+                  </Text>
+
+                  {isVisitor && (
+                    <View style={{ position: 'relative', marginLeft: 10, zIndex: 100 }}>
+                      <TouchableOpacity 
+                        activeOpacity={0.7}
+                        style={styles.visitorBadge}
+                        onPress={() => setShowVisitorTooltip(!showVisitorTooltip)}
+                      >
+                        <View style={styles.visitorIconWrapper}>
+                          <FontAwesome6 name="location-dot" size={10} color="#000" />
+                          <FontAwesome6 name="xmark" size={8} color="#000" style={styles.visitorIconCross} />
+                        </View>
+                        <Text style={styles.visitorBadgeText}>Visitante</Text>
+                      </TouchableOpacity>
+
+                      {showVisitorTooltip && (
+                        <Animated.View 
+                          entering={FadeInUp.duration(200)} 
+                          exiting={FadeOut.duration(200)} 
+                          style={styles.visitorTooltip}
+                        >
+                          <Text style={styles.visitorTooltipText}>
+                            Você está publicando este relato para uma cidade onde não está fisicamente presente no momento da criação.
+                          </Text>
+                          <View style={styles.visitorTooltipArrow} />
+                        </Animated.View>
+                      )}
+                    </View>
+                  )}
+                </View>
                 
                 <View style={styles.headerRight}>
                   {isKeyboardVisible ? (
@@ -233,17 +282,26 @@ export default function AddRelatoModal({ visible, onClose, draftData, draftId, i
                     >
                       <Text style={styles.doneButtonText}>OK</Text>
                     </TouchableOpacity>
+                  ) : isSelectingCrime ? (
+                    <TouchableOpacity 
+                      style={styles.closeButton} 
+                      onPress={() => setIsSelectingCrime(false)}
+                      activeOpacity={0.7}
+                    >
+                      <FontAwesome6 name="arrow-left" size={16} color="#4b5563" />
+                    </TouchableOpacity>
                   ) : (
                     <TouchableOpacity 
                       style={styles.closeButton} 
                       onPress={() => setShowOptions(!showOptions)}
+                      activeOpacity={0.7}
                     >
                       <FontAwesome6 name="xmark" size={18} color="#4b5563" />
                     </TouchableOpacity>
                   )}
 
                   {/* Popover Options */}
-                  {showOptions && (
+                  {showOptions && !isSelectingCrime && (
                     <View style={styles.popover}>
                       <TouchableOpacity style={styles.popoverOption} onPress={handleClear} disabled={isSubmitting}>
                         <FontAwesome6 name="trash" size={14} color="#dc2626" />
@@ -267,10 +325,6 @@ export default function AddRelatoModal({ visible, onClose, draftData, draftId, i
                 /* Seleção de Crime */
                 <View style={styles.crimeSelectionContainer}>
                   <View style={styles.selectionHeader}>
-                    <TouchableOpacity onPress={() => setIsSelectingCrime(false)} style={styles.backButton}>
-                      <FontAwesome6 name="arrow-left" size={16} color="#4b5563" />
-                      <Text style={styles.backText}>Voltar</Text>
-                    </TouchableOpacity>
                     <Text style={styles.selectionTitle}>Selecione a Natureza</Text>
                   </View>
                   <ScrollView showsVerticalScrollIndicator={false}>
@@ -336,11 +390,6 @@ export default function AddRelatoModal({ visible, onClose, draftData, draftId, i
                               </Text>
                             )}
                           </View>
-                          {isVisitor && initialLocation && (
-                            <View style={styles.visitorBadge}>
-                              <Text style={styles.visitorText}>Visitante</Text>
-                            </View>
-                          )}
                         </View>
                         <TouchableOpacity 
                           style={[styles.changeLocationBtn, !initialLocation && { backgroundColor: '#cbd5e1' }]}
@@ -490,7 +539,12 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 16,
-    zIndex: 10,
+    zIndex: 100,
+  },
+  headerTitleContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    zIndex: 100,
   },
   title: {
     fontFamily: 'texgyB',
@@ -706,28 +760,16 @@ const styles = StyleSheet.create({
     maxHeight: SCREEN_HEIGHT * 0.55,
   },
   selectionHeader: {
-    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     marginBottom: 16,
-  },
-  backButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 8,
-    backgroundColor: '#f3f4f6',
-    borderRadius: 8,
-    marginRight: 12,
-  },
-  backText: {
-    fontFamily: 'texgyB',
-    marginLeft: 6,
-    fontSize: 14,
-    color: '#4b5563',
+    paddingVertical: 2,
   },
   selectionTitle: {
     fontFamily: 'texgyB',
     fontSize: 16,
     color: '#1f2937',
+    textAlign: 'center',
   },
   natureGroup: {
     marginBottom: 20,
@@ -800,6 +842,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.15,
     shadowRadius: 10,
     elevation: 6,
+    zIndex: 50,
   },
   locationInfo: {
     flexDirection: 'row',
@@ -823,17 +866,62 @@ const styles = StyleSheet.create({
     flexShrink: 1,
   },
   visitorBadge: {
-    backgroundColor: 'rgba(253, 230, 138, 0.2)',
-    paddingHorizontal: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
     paddingVertical: 4,
+    paddingHorizontal: 6,
+    backgroundColor: '#f3f4f6',
     borderRadius: 6,
-    borderWidth: 1,
-    borderColor: 'rgba(252, 211, 77, 0.3)',
   },
-  visitorText: {
+  visitorIconWrapper: {
+    width: 14,
+    height: 14,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  visitorIconCross: {
+    position: 'absolute',
+    right: -2,
+    bottom: -2,
+    backgroundColor: '#f3f4f6',
+    borderRadius: 4,
+    overflow: 'hidden',
+  },
+  visitorBadgeText: {
+    fontSize: 11,
     fontFamily: 'texgyB',
-    color: '#fcd34d',
-    fontSize: 10,
+    color: '#000',
+    marginLeft: 4,
+  },
+  visitorTooltip: {
+    position: 'absolute',
+    top: 32,
+    left: 0,
+    backgroundColor: '#1f2937',
+    padding: 12,
+    borderRadius: 12,
+    width: 220,
+    zIndex: 120,
+    elevation: 10,
+    shadowColor: '#000',
+    shadowOpacity: 0.25,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 5 },
+  },
+  visitorTooltipText: {
+    color: '#fff',
+    fontSize: 12,
+    lineHeight: 18,
+    fontFamily: 'texgyR',
+  },
+  visitorTooltipArrow: {
+    position: 'absolute',
+    top: -5,
+    left: 20,
+    width: 12,
+    height: 12,
+    backgroundColor: '#1f2937',
+    transform: [{ rotate: '45deg' }],
   },
   changeLocationBtn: {
     flexDirection: 'row',

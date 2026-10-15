@@ -3,6 +3,29 @@ import { StyleSheet, View } from 'react-native';
 import MapView, { PROVIDER_GOOGLE, Marker } from 'react-native-maps';
 import { useSharedMap } from '../context/SharedMapContext';
 
+// Estilo minimalista (Opção 3): remove ícones e nomes de comércios/estabelecimentos,
+// transportes e ícones de rodovia, preservando ruas, rios, bairros, cidades e áreas verdes.
+const cleanMapStyle = [
+  {
+    featureType: 'poi',
+    stylers: [{ visibility: 'off' }],
+  },
+  {
+    featureType: 'poi.park',
+    elementType: 'geometry',
+    stylers: [{ visibility: 'on' }],
+  },
+  {
+    featureType: 'transit',
+    stylers: [{ visibility: 'off' }],
+  },
+  {
+    featureType: 'road',
+    elementType: 'labels.icon',
+    stylers: [{ visibility: 'off' }],
+  },
+];
+
 export default function SharedMapView() {
   const {
     mapRef,
@@ -28,9 +51,11 @@ export default function SharedMapView() {
   return (
     <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
       <MapView
+        key="shared-google-map-v2"
         ref={mapRef}
         style={StyleSheet.absoluteFill}
         provider={PROVIDER_GOOGLE}
+        customMapStyle={cleanMapStyle}
         initialRegion={region}
         onRegionChangeComplete={setRegion}
         onPress={handleMapPress}
