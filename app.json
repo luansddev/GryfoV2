@@ -13,6 +13,10 @@
     },
     "android": {
       "package": "br.gardio",
+      "notification": {
+        "icon": "./assets/images/notification-icon.png",
+        "color": "#1d4ed8"
+      },
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/gardio-icon.png",
         "backgroundColor": "#000000"
@@ -40,6 +44,7 @@
       [
         "expo-notifications",
         {
+          "icon": "./assets/images/notification-icon.png",
           "color": "#1d4ed8"
         }
       ]

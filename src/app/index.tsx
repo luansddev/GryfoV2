@@ -89,7 +89,7 @@ export default function Index() {
                                 activeOpacity={0.8}
                             >
                                 <FontAwesome6 name="user-plus" size={16} color="#fff" />
-                                <Text style={styles.btnPrimaryText}>Crie uma conta</Text>
+                                <Text style={styles.btnPrimaryText} numberOfLines={1} adjustsFontSizeToFit>Crie uma conta</Text>
                             </TouchableOpacity>
 
                             <View style={styles.dividerRow}>
@@ -104,7 +104,7 @@ export default function Index() {
                                 activeOpacity={0.8}
                             >
                                 <FontAwesome6 name="right-to-bracket" size={16} color="#fff" />
-                                <Text style={styles.btnSecondaryText}>Entrar</Text>
+                                <Text style={styles.btnSecondaryText} numberOfLines={1}>Entrar</Text>
                             </TouchableOpacity>
                         </View>
                     </Animated.View>
@@ -137,6 +137,7 @@ const styles = StyleSheet.create({
         height: 173,
     },
     bottomSection: {
+        width: "100%",
         marginBottom: 50,
     },
     tagline: {
@@ -147,9 +148,11 @@ const styles = StyleSheet.create({
         marginBottom: 36,
     },
     buttonGroup: {
+        width: "100%",
         gap: 0,
     },
     btnPrimary: {
+        width: "100%",
         backgroundColor: "rgba(255,255,255,0.15)",
         borderWidth: 1,
         borderColor: "rgba(255,255,255,0.3)",
@@ -158,12 +161,13 @@ const styles = StyleSheet.create({
         justifyContent: "center",
         alignItems: "center",
         flexDirection: "row",
+        paddingHorizontal: 16,
         gap: 10,
     },
     btnPrimaryText: {
         color: "#fff",
         fontFamily: "texgyR",
-        fontSize: 17,
+        fontSize: 16,
     },
     dividerRow: {
         flexDirection: "row",
@@ -183,17 +187,19 @@ const styles = StyleSheet.create({
         color: "rgba(255,255,255,0.5)",
     },
     btnSecondary: {
+        width: "100%",
         backgroundColor: "#2563eb",
         height: 52,
         borderRadius: 14,
         justifyContent: "center",
         alignItems: "center",
         flexDirection: "row",
+        paddingHorizontal: 16,
         gap: 10,
     },
     btnSecondaryText: {
         color: "#fff",
         fontFamily: "texgyR",
-        fontSize: 17,
+        fontSize: 16,
     },
 });

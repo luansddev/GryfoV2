@@ -22,7 +22,7 @@ try {
 export const VIGIA_CHANNEL_ID = 'vigias';
 
 export interface VigiaNotificationPayload {
-  type: 'vigia_relato' | 'upvote_milestone';
+  type: 'vigia_relato' | 'upvote_milestone' | 'report_received';
   notificationId?: string;
   relatoId?: string;
   latitude?: number;
@@ -52,8 +52,8 @@ export function setupLocalNotifications(): Promise<boolean> {
 
       if (Platform.OS === 'android') {
         await Notifications.setNotificationChannelAsync(VIGIA_CHANNEL_ID, {
-          name: 'Alertas dos Vigias',
-          description: 'Avisos de novos relatos dentro das áreas monitoradas pelos seus vigias',
+          name: 'Alertas e Atividade',
+          description: 'Avisos de novos relatos, vigias, incentivos e denúncias',
           importance: Notifications.AndroidImportance.HIGH,
           vibrationPattern: [0, 250, 150, 250],
           lightColor: '#2563eb',
@@ -111,7 +111,7 @@ export function addNotificationTapListener(
 
   const handleResponse = (response: any) => {
     const data = response?.notification?.request?.content?.data as VigiaNotificationPayload | undefined;
-    if (data?.type === 'vigia_relato') callback(data);
+    if (data) callback(data);
   };
 
   let subscription: { remove: () => void } | null = null;

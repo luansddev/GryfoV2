@@ -175,7 +175,7 @@ export default function Cadastro() {
                 />
 
                 <KeyboardAvoidingView
-                    behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+                    behavior="padding"
                     style={{ flex: 1 }}
                 >
                     <ScrollView
@@ -184,6 +184,8 @@ export default function Cadastro() {
                             { paddingTop: insets.top + 4, paddingBottom: insets.bottom + 40 },
                         ]}
                         keyboardShouldPersistTaps="handled"
+                        keyboardDismissMode="on-drag"
+                        showsVerticalScrollIndicator={false}
                     >
                         {/* Logo */}
                         <Animated.View style={[styles.logoRow, { opacity: logoOpacity }]}>
@@ -255,6 +257,7 @@ export default function Cadastro() {
                                                 onChangeText={setName}
                                                 style={styles.input}
                                                 autoCapitalize="words"
+                                                autoCorrect={false}
                                                 value={name}
                                             />
                                         </View>
@@ -304,6 +307,7 @@ export default function Cadastro() {
                                                 onChangeText={setEmail}
                                                 keyboardType="email-address"
                                                 autoCapitalize="none"
+                                                autoCorrect={false}
                                             />
                                         </View>
 
@@ -323,6 +327,7 @@ export default function Cadastro() {
                                                 value={cpf}
                                                 onChangeText={text => setCpf(formatCpf(text))}
                                                 keyboardType="numeric"
+                                                autoCorrect={false}
                                                 maxLength={14}
                                             />
                                         </View>
@@ -381,6 +386,8 @@ export default function Cadastro() {
                                                 onChangeText={setSenha}
                                                 value={senha}
                                                 secureTextEntry={secureEntry}
+                                                autoCapitalize="none"
+                                                autoCorrect={false}
                                                 style={styles.input}
                                             />
                                             <TouchableOpacity onPress={() => setSecureEntry(!secureEntry)} style={styles.eyeBtn}>
@@ -399,6 +406,8 @@ export default function Cadastro() {
                                                 onChangeText={setConfSenha}
                                                 value={confSenha}
                                                 secureTextEntry={secureEntryConf}
+                                                autoCapitalize="none"
+                                                autoCorrect={false}
                                                 style={styles.input}
                                             />
                                             <TouchableOpacity onPress={() => setSecureEntryConf(!secureEntryConf)} style={styles.eyeBtn}>

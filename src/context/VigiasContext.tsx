@@ -19,7 +19,7 @@ export interface Vigia {
   address?: string;
 }
 
-export type NotificationType = 'vigia_relato' | 'upvote_milestone';
+export type NotificationType = 'vigia_relato' | 'upvote_milestone' | 'report_received';
 
 export interface BaseNotification {
   id: string;
@@ -46,7 +46,18 @@ export interface UpvoteNotification extends BaseNotification {
   milestone: number;
 }
 
-export type VigiaNotification = VigiaRelatoNotification | UpvoteNotification;
+/** Confirmação de recebimento de uma denúncia feita pelo usuário */
+export interface ReportNotification extends BaseNotification {
+  type: 'report_received';
+  motivoLabel: string;
+}
+
+export type VigiaNotification = VigiaRelatoNotification | UpvoteNotification | ReportNotification;
+
+export interface ReportNotificationInput {
+  relato: any;
+  motivoLabel: string;
+}
 
 interface VigiasContextType {
   vigias: Vigia[];
@@ -59,6 +70,7 @@ interface VigiasContextType {
   markAllAsRead: () => void;
   removeNotification: (id: string) => void;
   clearNotifications: () => void;
+  addReportNotification: (input: ReportNotificationInput) => void;
 }
 
 /* ================= CONSTANTES ================= */
@@ -172,7 +184,7 @@ export function VigiasProvider({ children }: { children: React.ReactNode }) {
           const parsed: VigiaNotification[] = JSON.parse(storedNotifications);
           notificationsRef.current = parsed;
           processedRelatosRef.current.clear();
-          parsed.forEach(n => processedRelatosRef.current.add(n.relatoId));
+          parsed.forEach(n => { if (n.type === 'vigia_relato') processedRelatosRef.current.add(n.relatoId); });
           setNotifications(parsed);
         } else {
           notificationsRef.current = [];
@@ -199,12 +211,12 @@ export function VigiasProvider({ children }: { children: React.ReactNode }) {
     return unsubscribe;
   }, []);
 
-  const hasVigias = vigias.length > 0;
-
-  // Pede permissão de notificação assim que o usuário tiver ao menos um vigia
+  // Configura canais de notificação e permissões do sistema assim que o contexto inicializa
   useEffect(() => {
-    if (hasVigias) setupLocalNotifications();
-  }, [hasVigias]);
+    setupLocalNotifications();
+  }, []);
+
+  const hasVigias = vigias.length > 0;
 
   /* ---------- Monitor de relatos ---------- */
 
@@ -409,7 +421,17 @@ export function VigiasProvider({ children }: { children: React.ReactNode }) {
             fresh.forEach(n => {
               if (n.type === 'upvote_milestone') {
                 const title = n.milestone === 1 ? 'Seu relato recebeu o primeiro incentivo!' : `Seu relato recebeu ${n.milestone} incentivos`;
-                presentLocalNotification(title, 'Alguém confirmou a informação do seu relato.', { type: 'upvote_milestone' });
+                presentLocalNotification(
+                  title,
+                  'Alguém confirmou a informação do seu relato.',
+                  {
+                    type: 'upvote_milestone',
+                    notificationId: n.id,
+                    relatoId: n.relatoId,
+                    latitude: n.latitude,
+                    longitude: n.longitude,
+                  }
+                );
               }
             });
           }
@@ -446,6 +468,37 @@ export function VigiasProvider({ children }: { children: React.ReactNode }) {
     commitNotifications([]);
   }, [commitNotifications]);
 
+  const addReportNotification = useCallback(({ relato, motivoLabel }: ReportNotificationInput) => {
+    const now = Date.now();
+    const notification: ReportNotification = {
+      id: `rn_${relato.id}_${now}`,
+      type: 'report_received',
+      relatoId: relato.id,
+      motivoLabel,
+      crimeKey: relato.crimeKey ?? null,
+      texto: relato.texto ?? '',
+      latitude: Number(relato.latitude) || 0,
+      longitude: Number(relato.longitude) || 0,
+      // Usa o momento da denúncia para agrupar/ordenar no feed de Atividade
+      relatoCreatedAt: now,
+      createdAt: now,
+      read: false,
+    };
+    commitNotifications([notification, ...notificationsRef.current]);
+
+    presentLocalNotification(
+      'Recebemos sua denúncia',
+      'Obrigado por contribuir! Você será notificado quando analisarmos o caso.',
+      {
+        type: 'report_received',
+        notificationId: notification.id,
+        relatoId: relato.id,
+        latitude: notification.latitude,
+        longitude: notification.longitude,
+      }
+    );
+  }, [commitNotifications]);
+
   const unreadCount = useMemo(() => notifications.filter(n => !n.read).length, [notifications]);
 
   const value = useMemo<VigiasContextType>(() => ({
@@ -458,7 +511,8 @@ export function VigiasProvider({ children }: { children: React.ReactNode }) {
     markAllAsRead,
     removeNotification,
     clearNotifications,
-  }), [vigias, vigiasLoaded, saveVigias, notifications, unreadCount, markAsRead, markAllAsRead, removeNotification, clearNotifications]);
+    addReportNotification,
+  }), [vigias, vigiasLoaded, saveVigias, notifications, unreadCount, markAsRead, markAllAsRead, removeNotification, clearNotifications, addReportNotification]);
 
   return <VigiasContext.Provider value={value}>{children}</VigiasContext.Provider>;
 }

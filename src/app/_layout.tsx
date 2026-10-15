@@ -27,11 +27,14 @@ export default function RootLayout() {
     return unsubscribe;
   }, []);
 
+  // Verifica se está em uma tela de autenticação
+  const isAuthScreen = segments[0] === 'cadastro' || segments[0] === 'login' || (segments.length as number) === 0;
+  const authReady = user !== undefined;
+  // Indica se a rota atual não corresponde ao estado de autenticação (redirect pendente)
+  const needsRedirect = authReady && ((!!user && isAuthScreen) || (user === null && !isAuthScreen));
+
   useEffect(() => {
-    if (user === undefined) return; // Aguardando carregamento do auth
-    
-    // Verifica se está em uma tela de autenticação
-    const isAuthScreen = segments[0] === 'cadastro' || segments[0] === 'login' || (segments.length as number) === 0;
+    if (!authReady) return; // Aguardando carregamento do auth
 
     if (user && isAuthScreen) {
       // Se estiver logado e na tela inicial/login/cadastro, redireciona para a home
@@ -54,23 +57,31 @@ export default function RootLayout() {
 
   useEffect(() => {
     if (error) throw error;
-    if (fontsLoaded) {
+    // Só esconde a splash quando as fontes carregaram, o Firebase restaurou a sessão
+    // e o usuário já está na rota correta (evita "piscar" a tela inicial antes da home)
+    if (fontsLoaded && authReady && !needsRedirect) {
       SplashScreen.hideAsync();
     }
-  }, [fontsLoaded, error]);
+  }, [fontsLoaded, error, authReady, needsRedirect]);
+
+  // Fallback: garante que a splash não fique presa caso o auth demore demais
+  useEffect(() => {
+    const timeout = setTimeout(() => SplashScreen.hideAsync(), 5000);
+    return () => clearTimeout(timeout);
+  }, []);
 
   const renderTabBar = useCallback(() => <BottomMenuWrapper />, []);
 
-  if (!fontsLoaded && !error) {
-    return null;
-  }
+  // Obs.: não retornamos null enquanto as fontes carregam. O navegador precisa estar
+  // montado desde o início para o expo-router processar o link inicial; a splash
+  // nativa continua cobrindo a tela até fontes + auth estarem prontos.
 
   return (
     <VigiaCreationProvider>
     <VigiasProvider>
     <SearchLocationProvider>
     <SharedMapProvider>
-      {user ? <VigiaNotificationTapHandler /> : null}
+      <VigiaNotificationTapHandler />
       <View style={styles.container}>
       <View style={styles.content}>
         <Tabs tabBar={renderTabBar} screenOptions={{ headerShown: false }}>
@@ -114,10 +125,10 @@ function VigiaNotificationTapHandler() {
     return addNotificationTapListener((data) => {
       if (data.notificationId) markAsRead(data.notificationId);
 
-      if (typeof data.latitude === 'number' && typeof data.longitude === 'number') {
+      if (typeof data.latitude === 'number' && typeof data.longitude === 'number' && data.latitude !== 0 && data.longitude !== 0) {
         router.push({
           pathname: '/home',
-          params: { focusLat: data.latitude, focusLng: data.longitude, switchTab: 'relatos' },
+          params: { focusLat: data.latitude, focusLng: data.longitude, switchTab: 'relatos', openRelatoId: data.relatoId },
         });
       } else {
         router.push('/notificacoes');

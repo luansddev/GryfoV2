@@ -6,6 +6,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { db } from '../config/firebaseConfig';
 import { doc, updateDoc, increment, deleteDoc, arrayUnion, arrayRemove } from 'firebase/firestore';
 import { getCrimeIcon, formatCrimeName } from '../constants/CrimeData';
+import ReportRelatoModal, { reportStorageKey } from './ReportRelatoModal';
 
 interface RelatoItemProps {
   relato: any;
@@ -24,6 +25,14 @@ export default function RelatoItem({ relato, currentDeviceId, index = 0, showCit
   const [isBookmarking, setIsBookmarking] = useState(false);
   const [showTooltip, setShowTooltip] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [showReportModal, setShowReportModal] = useState(false);
+
+  // Carrega se este relato já foi denunciado por este dispositivo
+  useEffect(() => {
+    AsyncStorage.getItem(reportStorageKey(relato.id))
+      .then((value) => setFlagged(!!value))
+      .catch(() => {});
+  }, [relato.id]);
 
   useEffect(() => {
     setBookmarked(relato.bookmarkedBy?.includes(currentDeviceId) || false);
@@ -166,6 +175,18 @@ export default function RelatoItem({ relato, currentDeviceId, index = 0, showCit
             </Animated.View>
           </View>
         </Modal>
+
+        {/* Tela de Denúncia */}
+        {!isOwner && (
+          <ReportRelatoModal
+            visible={showReportModal}
+            relato={relato}
+            currentDeviceId={currentDeviceId}
+            alreadyReported={flagged}
+            onClose={() => setShowReportModal(false)}
+            onReported={() => setFlagged(true)}
+          />
+        )}
 
         {showTooltip && (
           <TouchableOpacity 
@@ -369,7 +390,7 @@ export default function RelatoItem({ relato, currentDeviceId, index = 0, showCit
                   <TouchableOpacity 
                     style={[styles.actionButton, flagged && styles.actionButtonActiveRed]} 
                     activeOpacity={0.7}
-                    onPress={() => setFlagged(!flagged)}
+                    onPress={() => setShowReportModal(true)}
                   >
                     <FontAwesome6 name="flag" size={14} color={flagged ? "#dc2626" : "#6b7280"} solid={flagged} />
                   </TouchableOpacity>

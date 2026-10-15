@@ -94,7 +94,7 @@ export default function Login() {
                 />
 
                 <KeyboardAvoidingView
-                    behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+                    behavior="padding"
                     style={{ flex: 1 }}
                 >
                     <ScrollView
@@ -103,6 +103,8 @@ export default function Login() {
                             { paddingTop: insets.top + 4, paddingBottom: insets.bottom + 40 },
                         ]}
                         keyboardShouldPersistTaps="handled"
+                        keyboardDismissMode="on-drag"
+                        showsVerticalScrollIndicator={false}
                     >
                         {/* Logo */}
                         <Animated.View style={[styles.logoRow, { opacity: logoOpacity }]}>
@@ -133,6 +135,7 @@ export default function Login() {
                                     style={styles.input}
                                     keyboardType="email-address"
                                     autoCapitalize="none"
+                                    autoCorrect={false}
                                     value={email}
                                     onChangeText={setEmail}
                                 />
@@ -146,6 +149,8 @@ export default function Login() {
                                     placeholderTextColor="rgba(255,255,255,0.4)"
                                     secureTextEntry={secureEntry}
                                     style={styles.input}
+                                    autoCapitalize="none"
+                                    autoCorrect={false}
                                     value={senha}
                                     onChangeText={setSenha}
                                 />

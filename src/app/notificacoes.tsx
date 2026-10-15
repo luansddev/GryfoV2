@@ -4,7 +4,7 @@ import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { FontAwesome6 } from '@expo/vector-icons';
 import Animated, { FadeInDown, FadeInUp, FadeOut, LinearTransition } from 'react-native-reanimated';
-import { useVigias, VigiaNotification, formatDistance } from '../context/VigiasContext';
+import { useVigias, VigiaNotification, ReportNotification, formatDistance } from '../context/VigiasContext';
 import { formatCrimeName, getCrimeIcon } from '../constants/CrimeData';
 import { TempoOcorrido } from '../utils/timestampRelative';
 import TabTransitionView from '../components/TabTransitionView';
@@ -62,18 +62,23 @@ interface NotificationCardProps {
 
 function NotificationCard({ notification, index, onPress, onRemove }: NotificationCardProps) {
   const isUpvote = notification.type === 'upvote_milestone';
+  const isReport = notification.type === 'report_received';
   const crime = notification.crimeKey ? getCrimeIcon(notification.crimeKey) : { icon: 'comment-dots', color: '#2563eb' };
-  
+
   let title = '';
-  if (isUpvote) {
+  if (isReport) {
+    title = 'Denúncia registrada';
+  } else if (isUpvote) {
     const n = notification as any;
     title = n.milestone === 1 ? 'Seu relato recebeu o primeiro incentivo!' : `Seu relato recebeu ${n.milestone} incentivos`;
   } else {
     title = notification.crimeKey ? formatCrimeName(notification.crimeKey) : 'Novo relato';
   }
 
-  const badgeIcon = isUpvote ? 'arrow-up' : 'eye';
-  const badgeColor = isUpvote ? '#eab308' : '#1d4ed8';
+  const iconName = isReport ? 'flag' : (crime.icon as any);
+  const iconColor = isReport ? '#dc2626' : crime.color;
+  const badgeIcon = isReport ? 'check' : (isUpvote ? 'arrow-up' : 'eye');
+  const badgeColor = isReport ? '#16a34a' : (isUpvote ? '#eab308' : '#1d4ed8');
 
   return (
     <Animated.View
@@ -86,8 +91,8 @@ function NotificationCard({ notification, index, onPress, onRemove }: Notificati
         activeOpacity={0.85}
         onPress={onPress}
       >
-        <View style={[styles.cardIcon, { backgroundColor: `${crime.color}14`, borderColor: `${crime.color}33` }]}>
-          <FontAwesome6 name={crime.icon as any} size={17} color={crime.color} />
+        <View style={[styles.cardIcon, { backgroundColor: `${iconColor}14`, borderColor: `${iconColor}33` }]}>
+          <FontAwesome6 name={iconName} size={17} color={iconColor} />
           <View style={[styles.cardIconBadge, { backgroundColor: badgeColor }]}>
             <FontAwesome6 name={badgeIcon as any} size={8} color="#fff" />
           </View>
@@ -101,7 +106,12 @@ function NotificationCard({ notification, index, onPress, onRemove }: Notificati
             <Text style={styles.cardTime}>{extrairHorario(notification.relatoCreatedAt)}</Text>
           </View>
 
-          {isUpvote ? (
+          {isReport ? (
+            <Text style={styles.cardVigia} numberOfLines={1}>
+              Motivo: <Text style={[styles.cardVigiaName, { color: '#dc2626' }]}>{(notification as ReportNotification).motivoLabel || 'Denúncia'}</Text>
+              {notification.crimeKey ? ` · ${formatCrimeName(notification.crimeKey)}` : ''}
+            </Text>
+          ) : isUpvote ? (
             <Text style={styles.cardVigia} numberOfLines={1}>
               Relato de <Text style={styles.cardVigiaName}>{notification.crimeKey ? formatCrimeName(notification.crimeKey) : 'aviso'}</Text>
             </Text>
@@ -112,17 +122,23 @@ function NotificationCard({ notification, index, onPress, onRemove }: Notificati
             </Text>
           )}
 
-          {!!notification.texto && (
-            <Text style={styles.cardText} numberOfLines={2}>
-              {notification.texto}
+          {isReport ? (
+            <Text style={styles.cardText} numberOfLines={3}>
+              Recebemos sua denúncia. Obrigado por contribuir! Você será notificado quando analisarmos o caso.
             </Text>
+          ) : (
+            !!notification.texto && (
+              <Text style={styles.cardText} numberOfLines={2}>
+                {notification.texto}
+              </Text>
+            )
           )}
 
           <View style={styles.cardFooter}>
             <Text style={styles.cardRelative}>{TempoOcorrido(notification.relatoCreatedAt)}</Text>
             <View style={styles.cardLink}>
-              <Text style={styles.cardLinkText}>Ver no mapa</Text>
-              <FontAwesome6 name="location-arrow" size={9} color="#2563eb" />
+              <Text style={styles.cardLinkText}>{isReport ? 'Ver relato' : 'Ver no mapa'}</Text>
+              <FontAwesome6 name={isReport ? 'chevron-right' : 'location-arrow'} size={9} color="#2563eb" />
             </View>
           </View>
         </View>
@@ -154,10 +170,17 @@ export default function Notificacoes() {
 
   const handleOpen = (n: VigiaNotification) => {
     markAsRead(n.id);
-    router.push({
-      pathname: '/home',
-      params: { focusLat: n.latitude, focusLng: n.longitude, switchTab: 'relatos', openRelatoId: n.relatoId },
-    });
+    if (typeof n.latitude === 'number' && typeof n.longitude === 'number' && n.latitude !== 0 && n.longitude !== 0) {
+      router.push({
+        pathname: '/home',
+        params: { focusLat: n.latitude, focusLng: n.longitude, switchTab: 'relatos', openRelatoId: n.relatoId },
+      });
+    } else {
+      router.push({
+        pathname: '/home',
+        params: { switchTab: 'relatos', openRelatoId: n.relatoId },
+      });
+    }
   };
 
   let cardIndex = 0;
