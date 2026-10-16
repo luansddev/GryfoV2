@@ -31,14 +31,19 @@ export default function Login() {
     const [isLoading, setIsLoading] = useState(false);
     const [errorMessage, setErrorMessage] = useState('');
     const [secureEntry, setSecureEntry] = useState(true);
+    const senhaRef = useRef<TextInput>(null);
 
     const bgOpacity = useRef(new Animated.Value(0)).current;
     const logoOpacity = useRef(new Animated.Value(0)).current;
     const contentOpacity = useRef(new Animated.Value(0)).current;
     const contentTranslateY = useRef(new Animated.Value(30)).current;
+    const hasAnimatedRef = useRef(false);
 
     useFocusEffect(
         useCallback(() => {
+            if (hasAnimatedRef.current) return;
+            hasAnimatedRef.current = true;
+
             bgOpacity.setValue(0);
             logoOpacity.setValue(0);
             contentOpacity.setValue(0);
@@ -52,6 +57,10 @@ export default function Login() {
                     Animated.spring(contentTranslateY, { toValue: 0, friction: 8, tension: 40, useNativeDriver: true }),
                 ]),
             ]).start();
+
+            return () => {
+                hasAnimatedRef.current = false;
+            };
         }, [])
     );
 
@@ -103,8 +112,8 @@ export default function Login() {
                             { paddingTop: insets.top + 4, paddingBottom: insets.bottom + 40 },
                         ]}
                         keyboardShouldPersistTaps="handled"
-                        keyboardDismissMode="on-drag"
                         showsVerticalScrollIndicator={false}
+                        automaticallyAdjustKeyboardInsets={true}
                     >
                         {/* Logo */}
                         <Animated.View style={[styles.logoRow, { opacity: logoOpacity }]}>
@@ -127,7 +136,7 @@ export default function Login() {
                             <Text style={styles.subtitle}>Olá, bem-vindo de volta</Text>
 
                             {/* Email input */}
-                            <View style={styles.inputWrapper}>
+                            <View collapsable={false} style={styles.inputWrapper}>
                                 <FontAwesome6 name="envelope" size={15} color="rgba(255,255,255,0.5)" style={styles.inputIcon} />
                                 <TextInput
                                     placeholder="Email"
@@ -138,13 +147,16 @@ export default function Login() {
                                     autoCorrect={false}
                                     value={email}
                                     onChangeText={setEmail}
+                                    returnKeyType="next"
+                                    onSubmitEditing={() => senhaRef.current?.focus()}
                                 />
                             </View>
 
                             {/* Password input */}
-                            <View style={styles.inputWrapper}>
+                            <View collapsable={false} style={styles.inputWrapper}>
                                 <FontAwesome6 name="lock" size={15} color="rgba(255,255,255,0.5)" style={styles.inputIcon} />
                                 <TextInput
+                                    ref={senhaRef}
                                     placeholder="Senha"
                                     placeholderTextColor="rgba(255,255,255,0.4)"
                                     secureTextEntry={secureEntry}
@@ -153,6 +165,12 @@ export default function Login() {
                                     autoCorrect={false}
                                     value={senha}
                                     onChangeText={setSenha}
+                                    returnKeyType="done"
+                                    onSubmitEditing={() => {
+                                        if (!isButtonDisabled) {
+                                             handleLogin();
+                                        }
+                                    }}
                                 />
                                 <TouchableOpacity onPress={() => setSecureEntry(!secureEntry)} style={styles.eyeBtn}>
                                     <FontAwesome6 name={secureEntry ? "eye" : "eye-slash"} size={15} color="rgba(255,255,255,0.5)" />

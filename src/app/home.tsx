@@ -56,14 +56,9 @@ export function HomeContent() {
 
   const handleTabPress = useCallback((i: number) => {
     setIndex(i);
+    setActiveTab(i);
+    setMapInteractionEnabled(true);
     animateToTab(i);
-    
-    // Crucial for performance: defer the heavy map state updates
-    // until after the swipe animation finishes, avoiding stuttering.
-    InteractionManager.runAfterInteractions(() => {
-      setActiveTab(i);
-      setMapInteractionEnabled(true);
-    });
   }, [animateToTab, setActiveTab, setMapInteractionEnabled]);
 
   const params = useLocalSearchParams();

@@ -71,6 +71,8 @@ export function SharedMapProvider({ children }: { children: ReactNode }) {
   /* ================= LOCATION INIT ================= */
   useEffect(() => {
     let isMounted = true;
+    let subscription: Location.LocationSubscription | null = null;
+
     (async () => {
       try {
         const { status } = await Location.requestForegroundPermissionsAsync();
@@ -90,13 +92,29 @@ export function SharedMapProvider({ children }: { children: ReactNode }) {
         };
         setRegion(newRegion);
         mapRef.current?.animateToRegion(newRegion);
+
+        // Acompanha atualizações de localização em tempo real via JS
+        subscription = await Location.watchPositionAsync(
+          {
+            accuracy: Location.Accuracy.Balanced,
+            timeInterval: 4000,
+            distanceInterval: 5,
+          },
+          (newLoc) => {
+            if (isMounted) setUserLocation(newLoc);
+          }
+        );
       } catch (error) {
         console.warn('Erro ao obter localização:', error);
       } finally {
         if (isMounted) setLocationLoading(false);
       }
     })();
-    return () => { isMounted = false; };
+
+    return () => {
+      isMounted = false;
+      subscription?.remove();
+    };
   }, []);
 
   return (

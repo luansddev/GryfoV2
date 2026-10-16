@@ -1,3 +1,4 @@
+import '../utils/fabricEventPolyfill';
 import React, { useMemo } from 'react';
 import { StyleSheet, View } from 'react-native';
 import MapView, { PROVIDER_GOOGLE, Marker } from 'react-native-maps';
@@ -51,7 +52,7 @@ export default function SharedMapView() {
   return (
     <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
       <MapView
-        key="shared-google-map-v2"
+        key="shared-google-map-v3"
         ref={mapRef}
         style={StyleSheet.absoluteFill}
         provider={PROVIDER_GOOGLE}
@@ -59,6 +60,7 @@ export default function SharedMapView() {
         initialRegion={region}
         onRegionChangeComplete={setRegion}
         onPress={handleMapPress}
+        showsUserLocation={true}
         showsMyLocationButton={false}
         showsCompass={false}
         toolbarEnabled={false}
@@ -68,8 +70,8 @@ export default function SharedMapView() {
         rotateEnabled={mapInteractionEnabled}
         minZoomLevel={14}
         mapPadding={{ top: 0, right: 0, bottom: 0, left: 0 }}
-        showsUserLocation={true}
       >
+
         {/* Persistent shapes to avoid Android unmount bugs */}
         {getMapChildren('locais_persistent')}
 

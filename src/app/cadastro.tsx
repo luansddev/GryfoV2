@@ -1,5 +1,5 @@
 import { useRouter, useFocusEffect } from "expo-router";
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useCallback, useRef } from 'react';
 import {
     ActivityIndicator,
     Alert,
@@ -35,23 +35,26 @@ export default function Cadastro() {
     const [cpf, setCpf] = useState('');
     const [senha, setSenha] = useState('');
     const [confSenha, setConfSenha] = useState('');
-    const [isEmailValid, setIsEmailValid] = useState(false);
-    const [isCpfValid, setIsCpfValid] = useState(false);
-    const [isPasswordValid, setIsPasswordValid] = useState(false);
     const [secureEntry, setSecureEntry] = useState(true);
     const [secureEntryConf, setSecureEntryConf] = useState(true);
+
+    const cpfInputRef = useRef<TextInput>(null);
+    const confSenhaInputRef = useRef<TextInput>(null);
 
     const bgOpacity = useRef(new Animated.Value(0)).current;
     const logoOpacity = useRef(new Animated.Value(0)).current;
     const contentOpacity = useRef(new Animated.Value(0)).current;
     const contentTranslateY = useRef(new Animated.Value(30)).current;
 
-    // Animation for form steps swipe
     const formTranslateX = useRef(new Animated.Value(0)).current;
     const formOpacity = useRef(new Animated.Value(1)).current;
+    const hasAnimatedRef = useRef(false);
 
     useFocusEffect(
         useCallback(() => {
+            if (hasAnimatedRef.current) return;
+            hasAnimatedRef.current = true;
+
             bgOpacity.setValue(0);
             logoOpacity.setValue(0);
             contentOpacity.setValue(0);
@@ -65,6 +68,10 @@ export default function Cadastro() {
                     Animated.spring(contentTranslateY, { toValue: 0, friction: 8, tension: 40, useNativeDriver: true }),
                 ]),
             ]).start();
+
+            return () => {
+                hasAnimatedRef.current = false;
+            };
         }, [])
     );
 
@@ -91,16 +98,13 @@ export default function Cadastro() {
         return rest === parseInt(cpf[10]);
     };
 
-    useEffect(() => setIsEmailValid(validateEmail(email)), [email]);
-    useEffect(() => setIsCpfValid(validateCpf(cpf)), [cpf]);
-    useEffect(() => {
-        setIsPasswordValid(
-            senha.trim() !== '' &&
-            confSenha.trim() !== '' &&
-            senha === confSenha &&
-            senha.length >= 6
-        );
-    }, [senha, confSenha]);
+    const isEmailValid = validateEmail(email);
+    const isCpfValid = validateCpf(cpf);
+    const isPasswordValid =
+        senha.trim() !== '' &&
+        confSenha.trim() !== '' &&
+        senha === confSenha &&
+        senha.length >= 6;
 
     const voltar = () => router.back();
 
@@ -184,8 +188,8 @@ export default function Cadastro() {
                             { paddingTop: insets.top + 4, paddingBottom: insets.bottom + 40 },
                         ]}
                         keyboardShouldPersistTaps="handled"
-                        keyboardDismissMode="on-drag"
                         showsVerticalScrollIndicator={false}
+                        automaticallyAdjustKeyboardInsets={true}
                     >
                         {/* Logo */}
                         <Animated.View style={[styles.logoRow, { opacity: logoOpacity }]}>
@@ -249,7 +253,7 @@ export default function Cadastro() {
                                     <View style={[styles.formArea, { paddingTop: 0 }]}>
                                         <Text style={styles.subtitle}>Como podemos te chamar?</Text>
 
-                                        <View style={styles.inputWrapper}>
+                                        <View collapsable={false} style={styles.inputWrapper}>
                                             <FontAwesome6 name="user" size={15} color="rgba(255,255,255,0.5)" style={styles.inputIcon} />
                                             <TextInput
                                                 placeholder="Nome"
@@ -259,6 +263,12 @@ export default function Cadastro() {
                                                 autoCapitalize="words"
                                                 autoCorrect={false}
                                                 value={name}
+                                                returnKeyType="next"
+                                                onSubmitEditing={() => {
+                                                    if (!btDesativoPrimeiraEtapa && !isLoading) {
+                                                        handleAvancarPrimeiraEtapa();
+                                                    }
+                                                }}
                                             />
                                         </View>
 
@@ -290,7 +300,7 @@ export default function Cadastro() {
                                     <View style={[styles.formArea, { paddingTop: 0 }]}>
                                         <Text style={styles.subtitle}>Agora preencha os dados a seguir:</Text>
 
-                                        <View style={[
+                                        <View collapsable={false} style={[
                                             styles.inputWrapper,
                                             !isEmailValid && email.length > 0 && styles.inputError,
                                         ]}>
@@ -308,10 +318,12 @@ export default function Cadastro() {
                                                 keyboardType="email-address"
                                                 autoCapitalize="none"
                                                 autoCorrect={false}
+                                                returnKeyType="next"
+                                                onSubmitEditing={() => cpfInputRef.current?.focus()}
                                             />
                                         </View>
 
-                                        <View style={[
+                                        <View collapsable={false} style={[
                                             styles.inputWrapper,
                                             !isCpfValid && cpf.length > 0 && styles.inputError,
                                         ]}>
@@ -321,6 +333,7 @@ export default function Cadastro() {
                                                 <FontAwesome6 name="id-card" size={15} color="rgba(255,255,255,0.5)" style={styles.inputIcon} />
                                             )}
                                             <TextInput
+                                                ref={cpfInputRef}
                                                 placeholder="CPF"
                                                 placeholderTextColor="rgba(255,255,255,0.4)"
                                                 style={styles.input}
@@ -329,6 +342,12 @@ export default function Cadastro() {
                                                 keyboardType="numeric"
                                                 autoCorrect={false}
                                                 maxLength={14}
+                                                returnKeyType="done"
+                                                onSubmitEditing={() => {
+                                                    if (!btDesativoSegundaEtapa && !isLoading) {
+                                                        handleAvancarSegundaEtapa();
+                                                    }
+                                                }}
                                             />
                                         </View>
 
@@ -375,7 +394,7 @@ export default function Cadastro() {
                                             {"  "}Mínimo de 6 caracteres
                                         </Text>
 
-                                        <View style={[
+                                        <View collapsable={false} style={[
                                             styles.inputWrapper,
                                             ((senha.length > 0 && senha.length < 6) || (confSenha.length > 0 && senha !== confSenha)) && styles.inputError,
                                         ]}>
@@ -389,18 +408,21 @@ export default function Cadastro() {
                                                 autoCapitalize="none"
                                                 autoCorrect={false}
                                                 style={styles.input}
+                                                returnKeyType="next"
+                                                onSubmitEditing={() => confSenhaInputRef.current?.focus()}
                                             />
                                             <TouchableOpacity onPress={() => setSecureEntry(!secureEntry)} style={styles.eyeBtn}>
                                                 <FontAwesome6 name={secureEntry ? "eye" : "eye-slash"} size={15} color="rgba(255,255,255,0.5)" />
                                             </TouchableOpacity>
                                         </View>
 
-                                        <View style={[
+                                        <View collapsable={false} style={[
                                             styles.inputWrapper,
                                             ((confSenha.length > 0 && confSenha.length < 6) || (senha.length > 0 && senha !== confSenha)) && styles.inputError,
                                         ]}>
                                             <FontAwesome6 name="lock" size={15} color="rgba(255,255,255,0.5)" style={styles.inputIcon} />
                                             <TextInput
+                                                ref={confSenhaInputRef}
                                                 placeholder="Repita a senha"
                                                 placeholderTextColor="rgba(255,255,255,0.4)"
                                                 onChangeText={setConfSenha}
@@ -409,6 +431,12 @@ export default function Cadastro() {
                                                 autoCapitalize="none"
                                                 autoCorrect={false}
                                                 style={styles.input}
+                                                returnKeyType="done"
+                                                onSubmitEditing={() => {
+                                                    if (!btDesativoTerceiraEtapa && !isLoading) {
+                                                        handleConcluir();
+                                                    }
+                                                }}
                                             />
                                             <TouchableOpacity onPress={() => setSecureEntryConf(!secureEntryConf)} style={styles.eyeBtn}>
                                                 <FontAwesome6 name={secureEntryConf ? "eye" : "eye-slash"} size={15} color="rgba(255,255,255,0.5)" />

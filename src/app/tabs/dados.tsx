@@ -232,7 +232,7 @@ export default function Dados() {
   });
 
   const { location: searchedLocation, searchMode, searchedCity, userCity } = useSearchLocation();
-  const { mapRef, region: sharedRegion, registerMapChildren } = useSharedMap();
+  const { mapRef, region: sharedRegion, registerMapChildren, activeTab } = useSharedMap();
 
   const [region, setRegion] = useState<Region>({
     latitude: -23.5505,
@@ -459,6 +459,11 @@ export default function Dados() {
   }, [registerMapChildren]);
 
   useEffect(() => {
+    if (activeTab !== 0) {
+      registerMapChildren('dados', <></>);
+      return;
+    }
+
     if (!markersVisible) {
       registerMapChildren('dados', <></>);
       return;
@@ -488,7 +493,7 @@ export default function Dados() {
       );
     });
     registerMapChildren('dados', <React.Fragment key={`dados-batch-${mapFilter}-${clusterVersion}`}>{markersToRender}</React.Fragment>);
-  }, [visibleClusters, mapFilter, registerMapChildren, handleClusterPress, markersVisible, clusterVersion]);
+  }, [visibleClusters, mapFilter, registerMapChildren, handleClusterPress, markersVisible, clusterVersion, activeTab]);
 
   // Hide markers and clear the map as soon as the filter changes
   useEffect(() => {
