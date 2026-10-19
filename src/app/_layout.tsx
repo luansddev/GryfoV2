@@ -44,8 +44,17 @@ export default function RootLayout() {
     return unsubscribe;
   }, []);
 
-  // Verifica se está em uma tela de autenticação
-  const isAuthScreen = segments[0] === 'cadastro' || segments[0] === 'login' || (segments.length as number) === 0;
+  // Verifica se está em uma tela de autenticação / boas-vindas
+  const isAuthScreen =
+    !firstSegment ||
+    firstSegment === 'index' ||
+    firstSegment === 'login' ||
+    firstSegment === 'cadastro' ||
+    pathname === '/' ||
+    pathname === '/index' ||
+    pathname?.startsWith('/login') ||
+    pathname?.startsWith('/cadastro');
+
   const authReady = user !== undefined;
   // Indica se a rota atual não corresponde ao estado de autenticação (redirect pendente)
   const needsRedirect = authReady && ((!!user && isAuthScreen) || (user === null && !isAuthScreen));
@@ -60,7 +69,7 @@ export default function RootLayout() {
       // Se não estiver logado e tentar acessar uma tela protegida, redireciona para a tela inicial
       router.replace('/');
     }
-  }, [user, segments]);
+  }, [user, isAuthScreen, authReady]);
 
   const [fontsLoaded, error] = useFonts({
     'Avant': require('../../assets/fontes/AvantGarde-Bold.otf'),

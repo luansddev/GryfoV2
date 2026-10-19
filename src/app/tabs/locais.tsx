@@ -177,42 +177,43 @@ export default function Locais() {
   useEffect(() => {
     const isLocaisActive = activeTab === 2;
 
-    const persistentCircles = (
+    const persistentCircles = isLocaisActive ? (
       <>
         {/* Vigias salvos — Círculos de raio */}
         {vigias.map(vigia => (
           <Circle
             key={`locais-circle-${vigia.id}`}
             center={{ latitude: vigia.latitude, longitude: vigia.longitude }}
-            radius={isLocaisActive ? vigia.radius : 0}
-            fillColor={isLocaisActive ? "rgba(59, 130, 246, 0.12)" : "transparent"}
-            strokeColor={isLocaisActive ? "rgba(59, 130, 246, 0.45)" : "transparent"}
-            strokeWidth={isLocaisActive ? 2 : 0}
+            radius={vigia.radius}
+            fillColor="rgba(59, 130, 246, 0.12)"
+            strokeColor="rgba(59, 130, 246, 0.45)"
+            strokeWidth={2}
           />
         ))}
 
         {/* Ponto selecionado durante criação — Círculo preview */}
         {uiMode === 'creating' && selectedPoint && (
           <Circle
+            key="locais-circle-creating"
             center={selectedPoint}
-            radius={isLocaisActive ? vigiaRadius : 0}
-            fillColor={isLocaisActive ? "rgba(59, 130, 246, 0.15)" : "transparent"}
-            strokeColor={isLocaisActive ? "rgba(59, 130, 246, 0.6)" : "transparent"}
-            strokeWidth={isLocaisActive ? 2 : 0}
+            radius={vigiaRadius}
+            fillColor="rgba(59, 130, 246, 0.15)"
+            strokeColor="rgba(59, 130, 246, 0.6)"
+            strokeWidth={2}
           />
         )}
       </>
-    );
+    ) : null;
 
     registerMapChildren('locais_persistent', persistentCircles);
 
-    const markersToRender = (
+    const markersToRender = isLocaisActive ? (
       <>
-
         {/* Vigias salvos — Marcadores */}
         {vigias.map(vigia => (
           <Marker
             key={`locais-marker-${vigia.id}`}
+            identifier={`locais-marker-${vigia.id}`}
             coordinate={{ latitude: vigia.latitude, longitude: vigia.longitude }}
             title={vigia.name}
             description={`Raio: ${formatRadius(vigia.radius)}`}
@@ -234,8 +235,8 @@ export default function Locais() {
 
         {/* Marcador Temporário de Pesquisa (Target) */}
         {uiMode === 'creating' && searchedPoint && (
-          <Marker coordinate={searchedPoint} anchor={{ x: 0.5, y: 1 }}>
-            <View style={{ alignItems: 'center' }}>
+          <Marker identifier="locais-target-searched" coordinate={searchedPoint} anchor={{ x: 0.5, y: 1 }}>
+            <View style={{ alignItems: 'center' }} collapsable={false}>
               <View style={styles.targetCallout}>
                 <Text style={styles.targetCalloutText}>Toque aqui para confirmar</Text>
               </View>
@@ -248,11 +249,10 @@ export default function Locais() {
           </Marker>
         )}
 
-
-
         {/* Ponto selecionado durante criação — Marcador */}
         {uiMode === 'creating' && selectedPoint && (
           <Marker
+            identifier="locais-target-selected"
             coordinate={selectedPoint}
             anchor={{ x: 0.5, y: 0.5 }}
             tracksViewChanges={true}
@@ -276,13 +276,14 @@ export default function Locais() {
           return (
             <Marker
               key={`vigia-relato-${n.id}`}
+              identifier={`vigia-relato-${n.id}`}
               coordinate={{ latitude: n.latitude, longitude: n.longitude }}
               title={n.crimeKey ? formatCrimeName(n.crimeKey) : 'Novo relato'}
               description={n.texto}
               anchor={{ x: 0.5, y: 1 }}
               tracksViewChanges={tracksViewChanges}
             >
-              <View style={{ alignItems: 'center', justifyContent: 'center', width: 44, height: 44 }}>
+              <View style={{ alignItems: 'center', justifyContent: 'center', width: 44, height: 44 }} collapsable={false}>
                 <Svg width={36} height={36} viewBox="-2 -2 28 28">
                   <Path
                     d="M2 4c0-1.1.9-2 2-2h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2h-6l-2 6-2-6H4c-1.1 0-2-.9-2-2V4z"
@@ -297,7 +298,7 @@ export default function Locais() {
           );
         })}
       </>
-    );
+    ) : null;
     registerMapChildren('locais', markersToRender);
   }, [vigias, tracksViewChanges, uiMode, searchedPoint, selectedPoint, vigiaRadius, registerMapChildren, activeTab, notifications]);
 

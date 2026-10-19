@@ -5,12 +5,18 @@ import { useCallback, useRef } from "react";
 import { LinearGradient } from "expo-linear-gradient";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { FontAwesome6 } from "@expo/vector-icons";
+import { auth } from "../config/firebaseConfig";
 
 const { width, height } = Dimensions.get("window");
 const AnimatedImageBackground = Animated.createAnimatedComponent(ImageBackground);
 
 export default function Index() {
     const insets = useSafeAreaInsets();
+
+    // Se o usuário já estiver autenticado, não renderiza botões nem dispara animações da tela inicial
+    if (auth.currentUser) {
+        return <View style={styles.container} />;
+    }
 
     const bgOpacity = useRef(new Animated.Value(0)).current;
     const logoOpacity = useRef(new Animated.Value(0)).current;

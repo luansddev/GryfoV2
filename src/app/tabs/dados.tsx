@@ -137,13 +137,24 @@ const CRIME_COLORS: Record<string, string> = {
 const CrimeMarker = React.memo(({ feature, mapFilter }: { feature: any; mapFilter: string }) => {
   const [longitude, latitude] = feature.geometry.coordinates;
   const markerColor = CRIME_COLORS[mapFilter] || '#000000';
+  const [tracksViewChanges, setTracksViewChanges] = useState(true);
+
+  useEffect(() => {
+    if (tracksViewChanges) {
+      const timer = setTimeout(() => {
+        setTracksViewChanges(false);
+      }, 300);
+      return () => clearTimeout(timer);
+    }
+  }, [tracksViewChanges]);
 
   return (
     <Marker
+      identifier={`dados-crime-${feature.properties?.id || feature.id || `${latitude}-${longitude}`}`}
       coordinate={{ latitude, longitude }}
       title={feature.properties?.title}
       anchor={{ x: 0.5, y: 0.5 }}
-      tracksViewChanges={false}
+      tracksViewChanges={tracksViewChanges}
     >
       <View style={styles.crimeDiamondWrapper} collapsable={false}>
         <Svg width={20} height={20} viewBox="0 0 20 20">
@@ -178,6 +189,7 @@ const ClusterMarker = React.memo(({ cluster, mapFilter, onPress }: { cluster: an
 
   return (
     <Marker
+      identifier={`dados-cluster-${cluster.id}`}
       coordinate={{ latitude, longitude }}
       onPress={onPress}
       style={{ zIndex: cluster.properties.point_count + 1 }}

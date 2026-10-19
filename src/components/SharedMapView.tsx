@@ -72,8 +72,8 @@ export default function SharedMapView() {
         mapPadding={{ top: 0, right: 0, bottom: 0, left: 0 }}
       >
 
-        {/* Persistent shapes to avoid Android unmount bugs */}
-        {getMapChildren('locais_persistent')}
+        {/* Persistent shapes to avoid Android unmount bugs, only rendered when in locais tab */}
+        {activeTab === 2 && getMapChildren('locais_persistent')}
 
         {/* Render children for the currently active tab */}
         {getMapChildren(tabKey)}

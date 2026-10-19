@@ -48,22 +48,22 @@ const RelatoClusterMarker = React.memo(({ cluster, nature, onPress }: { cluster:
   const markerColor = nature === 'life' ? '#000000' : nature === 'physical' ? '#dc2626' : '#64748b';
 
   useEffect(() => {
-    if (tracksViewChanges) {
-      const timer = setTimeout(() => {
-        setTracksViewChanges(false);
-      }, 500);
-      return () => clearTimeout(timer);
-    }
-  }, [tracksViewChanges]);
+    setTracksViewChanges(true);
+    const timer = setTimeout(() => {
+      setTracksViewChanges(false);
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [cluster.id, cluster.properties?.point_count, nature]);
 
   return (
     <Marker
+      identifier={`relatos-cluster-${nature}-${cluster.id}`}
       coordinate={{ latitude: cluster.geometry.coordinates[1], longitude: cluster.geometry.coordinates[0] }}
       onPress={onPress}
       style={{ zIndex: cluster.properties.point_count + 1 }}
       tracksViewChanges={tracksViewChanges}
     >
-      <View style={styles.clusterContainer}>
+      <View style={styles.clusterContainer} collapsable={false}>
         <View style={[styles.clusterHalo, { backgroundColor: markerColor }]} />
         <View style={[styles.clusterCircle, { backgroundColor: markerColor }]}>
           <Text style={styles.clusterText}>{cluster.properties.point_count}</Text>
@@ -74,8 +74,19 @@ const RelatoClusterMarker = React.memo(({ cluster, nature, onPress }: { cluster:
 });
 
 const RelatoItemMarker = React.memo(({ relato, uiMode, onSelect, markerColor }: { relato: any; uiMode: string; onSelect: () => void; markerColor: string }) => {
+  const [tracksViewChanges, setTracksViewChanges] = useState(true);
+
+  useEffect(() => {
+    setTracksViewChanges(true);
+    const timer = setTimeout(() => {
+      setTracksViewChanges(false);
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [relato.id, markerColor]);
+
   return (
     <Marker
+      identifier={`relatos-marker-${relato.id}`}
       coordinate={{ latitude: relato.latitude, longitude: relato.longitude }}
       anchor={{ x: 0.5, y: 1 }}
       onPress={() => {
@@ -83,9 +94,9 @@ const RelatoItemMarker = React.memo(({ relato, uiMode, onSelect, markerColor }: 
           onSelect();
         }
       }}
-      tracksViewChanges={false}
+      tracksViewChanges={tracksViewChanges}
     >
-      <View style={{ alignItems: 'center', justifyContent: 'center', width: 44, height: 44 }}>
+      <View style={{ alignItems: 'center', justifyContent: 'center', width: 44, height: 44 }} collapsable={false}>
         <Svg width={36} height={36} viewBox="-2 -2 28 28">
           <Path
             d="M2 4c0-1.1.9-2 2-2h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2h-6l-2 6-2-6H4c-1.1 0-2-.9-2-2V4z"
@@ -519,8 +530,8 @@ export default function Relatos() {
           );
         })}
         {uiMode === 'creating_relato' && searchedPoint && (
-          <Marker coordinate={searchedPoint} anchor={{ x: 0.5, y: 1 }}>
-            <View style={{ alignItems: 'center' }}>
+          <Marker identifier="relatos-target-searched" coordinate={searchedPoint} anchor={{ x: 0.5, y: 1 }}>
+            <View style={{ alignItems: 'center' }} collapsable={false}>
               <View style={styles.targetCallout}>
                 <Text style={styles.targetCalloutText}>Toque aqui para confirmar</Text>
               </View>
@@ -535,6 +546,7 @@ export default function Relatos() {
 
         {uiMode === 'creating_relato' && selectedPoint && (
           <Marker
+            identifier="relatos-target-selected"
             coordinate={selectedPoint}
             anchor={{ x: 0.5, y: 0.5 }}
             tracksViewChanges={true}
@@ -699,6 +711,19 @@ export default function Relatos() {
 
     return () => unsubscribe();
   }, [searchMode, searchedCity, userCity]);
+
+  // Limpa seleção se o relato selecionado foi excluído
+  useEffect(() => {
+    if (selectedRelatoId && !relatos.some(r => r.id === selectedRelatoId)) {
+      setSelectedRelatoId(null);
+    }
+    if (selectedClusterLeaves && selectedClusterLeaves.length > 0) {
+      const remaining = selectedClusterLeaves.filter(leaf => relatos.some(r => r.id === leaf.id));
+      if (remaining.length !== selectedClusterLeaves.length) {
+        setSelectedClusterLeaves(remaining.length > 0 ? remaining : null);
+      }
+    }
+  }, [relatos, selectedRelatoId, selectedClusterLeaves]);
 
 
   return (

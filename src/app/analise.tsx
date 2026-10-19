@@ -10,6 +10,7 @@ import {
   Keyboard,
   Dimensions,
   ActivityIndicator,
+  useWindowDimensions,
 } from 'react-native';
 import * as Location from 'expo-location';
 import { normalizarCidade } from '../context/Normalizer';
@@ -123,13 +124,16 @@ function StateMessage({
 /* ================================================================== */
 
 function Hero({ analysis }: { analysis: AnalysisResult }) {
-  const [cardWidth, setCardWidth] = useState(SCREEN_WIDTH - 32);
+  const { width: windowWidth } = useWindowDimensions();
+  const [cardWidth, setCardWidth] = useState(windowWidth - 32);
   const { displayName, population, totalOccurrences, ratePer100k, benchmark, dataQuality } = analysis;
   const verdict = getVerdict(ratePer100k, benchmark?.stateRatePer100k);
   const v = verdict ? VERDICT_META[verdict.verdict] : null;
 
-  const bgWidth = cardWidth > 0 ? cardWidth : SCREEN_WIDTH - 32;
+  const bgWidth = cardWidth > 0 ? cardWidth : windowWidth - 32;
   const bgHeight = Math.round((bgWidth * 1308) / 736);
+
+  const isSmall = cardWidth < 360;
 
   return (
     <Animated.View entering={FadeInDown.duration(450)} style={styles.heroShadow}>
@@ -160,13 +164,13 @@ function Hero({ analysis }: { analysis: AnalysisResult }) {
         </View>
 
         {/* Conteúdo com padding interno */}
-        <View style={styles.heroContent}>
+        <View style={[styles.heroContent, isSmall && styles.heroContentSmall]}>
           <View style={styles.heroChip}>
             <FontAwesome6 name="calendar" size={10} color="#e0e7ff" />
             <Text style={styles.heroChipText}>{fmtPeriodLong(dataQuality.lastPeriod)}</Text>
           </View>
 
-          <Text style={styles.heroCity} numberOfLines={2} adjustsFontSizeToFit>
+          <Text style={styles.heroCity} numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.75}>
             {displayName ?? analysis.city}
           </Text>
           {population ? (
@@ -177,15 +181,43 @@ function Hero({ analysis }: { analysis: AnalysisResult }) {
 
           <View style={styles.heroStats}>
             <View style={styles.heroStat}>
-              <Text style={styles.heroStatValue}>{fmtInt(totalOccurrences)}</Text>
-              <Text style={styles.heroStatLabel}>ocorrências{'\n'}no mês</Text>
+              <Text
+                style={styles.heroStatValue}
+                numberOfLines={1}
+                adjustsFontSizeToFit
+                minimumFontScale={0.65}
+              >
+                {fmtInt(totalOccurrences)}
+              </Text>
+              <Text
+                style={styles.heroStatLabel}
+                numberOfLines={2}
+                adjustsFontSizeToFit
+                minimumFontScale={0.8}
+              >
+                ocorrências{'\n'}no mês
+              </Text>
             </View>
             {ratePer100k !== undefined && (
               <>
-                <View style={styles.heroDivider} />
+                <View style={[styles.heroDivider, isSmall && styles.heroDividerSmall]} />
                 <View style={styles.heroStat}>
-                  <Text style={styles.heroStatValue}>{fmtRate(ratePer100k)}</Text>
-                  <Text style={styles.heroStatLabel}>a cada 100 mil{'\n'}habitantes</Text>
+                  <Text
+                    style={styles.heroStatValue}
+                    numberOfLines={1}
+                    adjustsFontSizeToFit
+                    minimumFontScale={0.65}
+                  >
+                    {fmtRate(ratePer100k)}
+                  </Text>
+                  <Text
+                    style={styles.heroStatLabel}
+                    numberOfLines={2}
+                    adjustsFontSizeToFit
+                    minimumFontScale={0.8}
+                  >
+                    a cada 100 mil{'\n'}habitantes
+                  </Text>
                 </View>
               </>
             )}
@@ -196,7 +228,9 @@ function Hero({ analysis }: { analysis: AnalysisResult }) {
               <View style={[styles.verdictDot, { backgroundColor: v.bg }]}>
                 <FontAwesome6 name={v.icon as any} size={10} color={v.color} />
               </View>
-              <Text style={styles.verdictText}>{v.label}</Text>
+              <Text style={styles.verdictText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85}>
+                {v.label}
+              </Text>
               {verdict.verdict !== 'average' && (
                 <Text style={styles.verdictPct}>
                   {verdict.diffPct > 0 ? '+' : '−'}
@@ -737,20 +771,22 @@ const styles = StyleSheet.create({
   /* Hero */
   heroShadow: { borderRadius: 28, marginBottom: 16, shadowColor: '#1c1f75', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.35, shadowRadius: 18, elevation: 10 },
   hero: { borderRadius: 28, overflow: 'hidden', backgroundColor: '#0a0d2e', position: 'relative' },
-  heroContent: { padding: 22 },
+  heroContent: { paddingHorizontal: 20, paddingVertical: 22 },
+  heroContentSmall: { paddingHorizontal: 16, paddingVertical: 18 },
   heroBgImage: { position: 'absolute', bottom: 0, left: 0 },
   heroChip: { flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start', backgroundColor: 'rgba(255,255,255,0.16)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.22)', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 12 },
   heroChipText: { fontFamily: 'texgyB', fontSize: 11, color: '#e0e7ff', textTransform: 'capitalize' },
-  heroCity: { fontFamily: 'texgyB', fontSize: 30, color: '#fff', marginTop: 14, textShadowColor: 'rgba(0,0,0,0.5)', textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 6 },
+  heroCity: { fontFamily: 'texgyB', fontSize: 28, color: '#fff', marginTop: 12, textShadowColor: 'rgba(0,0,0,0.5)', textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 6 },
   heroPop: { fontFamily: 'texgyR', fontSize: 13, color: '#c7d2fe', marginTop: 4 },
-  heroStats: { flexDirection: 'row', alignItems: 'center', marginTop: 22 },
-  heroStat: { flex: 1 },
-  heroStatValue: { fontFamily: 'texgyB', fontSize: 34, color: '#fff', textShadowColor: 'rgba(0,0,0,0.3)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 4 },
+  heroStats: { flexDirection: 'row', alignItems: 'center', marginTop: 18, width: '100%' },
+  heroStat: { flex: 1, minWidth: 0 },
+  heroStatValue: { fontFamily: 'texgyB', fontSize: 30, color: '#fff', textShadowColor: 'rgba(0,0,0,0.3)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 4 },
   heroStatLabel: { fontFamily: 'texgyR', fontSize: 12, color: '#c7d2fe', marginTop: 2, lineHeight: 16 },
-  heroDivider: { width: 1, alignSelf: 'stretch', backgroundColor: 'rgba(255,255,255,0.22)', marginHorizontal: 16 },
-  verdictPill: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 20, backgroundColor: 'rgba(255,255,255,0.14)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.18)', borderRadius: 16, paddingVertical: 10, paddingHorizontal: 12 },
+  heroDivider: { width: 1, height: 42, backgroundColor: 'rgba(255,255,255,0.22)', marginHorizontal: 12 },
+  heroDividerSmall: { marginHorizontal: 8 },
+  verdictPill: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 18, backgroundColor: 'rgba(255,255,255,0.14)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.18)', borderRadius: 16, paddingVertical: 10, paddingHorizontal: 12 },
   verdictDot: { width: 22, height: 22, borderRadius: 11, alignItems: 'center', justifyContent: 'center' },
-  verdictText: { flex: 1, fontFamily: 'texgyB', fontSize: 14, color: '#fff' },
+  verdictText: { flex: 1, fontFamily: 'texgyB', fontSize: 13.5, color: '#fff' },
   verdictPct: { fontFamily: 'texgyB', fontSize: 14, color: '#c7d2fe' },
 
   /* Card */
