@@ -41,6 +41,7 @@ import RelatoItem from '../../components/RelatoItem';
 import { useVigiaCreation } from '../../context/VigiaCreationContext';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useSharedMap } from '../../context/SharedMapContext';
+import { getFloatingControlsBottom } from '../../constants/Layout';
 
 const RelatoClusterMarker = React.memo(({ cluster, nature, onPress }: { cluster: any; nature: string; onPress: () => void }) => {
   const [tracksViewChanges, setTracksViewChanges] = useState(true);
@@ -103,6 +104,7 @@ export default function Relatos() {
   const router = useRouter();
   const params = useLocalSearchParams();
   const insets = useSafeAreaInsets();
+  const floatingControlsBottom = getFloatingControlsBottom(insets.bottom);
   const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
   const [viewMode, setViewMode] = useState<'map' | 'list'>('map');
   const { mapRef, region: sharedRegion, registerMapChildren, setMapPressHandler, setMapInteractionEnabled, userLocation: sharedUserLocation, activeTab, setIsCreatingRelato } = useSharedMap();
@@ -698,9 +700,6 @@ export default function Relatos() {
     return () => unsubscribe();
   }, [searchMode, searchedCity, userCity]);
 
-  const filteredRelatos = useMemo(() => {
-    return relatos.filter(r => getRelatoNature(r.crimeKey) === mapFilter);
-  }, [relatos, mapFilter]);
 
   return (
     <View style={styles.container} pointerEvents="box-none">
@@ -734,7 +733,7 @@ export default function Relatos() {
                 </Text>
               </View>
             ) : (
-              filteredRelatos.map((relato, index) => (
+              relatos.map((relato, index) => (
                 <RelatoItem 
                   key={relato.id} 
                   relato={relato} 
@@ -743,6 +742,10 @@ export default function Relatos() {
                   showOwnerBadge={true} 
                   onViewOnMap={(r) => {
                     setViewMode('map');
+                    const targetNature = getRelatoNature(r.crimeKey);
+                    if (targetNature !== mapFilter) {
+                      setMapFilter(targetNature);
+                    }
                     mapRef.current?.animateToRegion({
                       latitude: r.latitude,
                       longitude: r.longitude,
@@ -768,7 +771,7 @@ export default function Relatos() {
             />
           )}
 
-          <View style={styles.idleControls} pointerEvents="box-none">
+          <View style={[styles.idleControls, { bottom: floatingControlsBottom }]} pointerEvents="box-none">
             {viewMode === 'map' && (
             <View style={styles.fabRow}>
               <TouchableOpacity
@@ -1206,7 +1209,6 @@ const styles = StyleSheet.create({
   },
   idleControls: {
     position: 'absolute',
-    bottom: 110,
     left: 0,
     right: 0,
     alignItems: 'center',

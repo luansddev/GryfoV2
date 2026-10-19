@@ -22,6 +22,7 @@ import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 import { db, auth } from '../config/firebaseConfig';
 import { getCrimeIcon, formatCrimeName } from '../constants/CrimeData';
 import { useVigias } from '../context/VigiasContext';
+import { StatusBar } from 'expo-status-bar';
 
 interface ReportRelatoModalProps {
   visible: boolean;
@@ -53,7 +54,9 @@ export const reportStorageKey = (relatoId: string) => `report_${relatoId}`;
 
 export default function ReportRelatoModal(props: ReportRelatoModalProps) {
   // O Modal no Android é uma janela separada: um SafeAreaProvider próprio garante
-  // que os insets (status bar / barra de navegação) sejam medidos corretamente aqui dentro
+  // que os insets (status bar / barra de navegação) sejam medidos corretamente aqui dentro.
+  // O StatusBar style="dark" garante que a barra de notificações do celular fique com ícones escuros
+  // visíveis sobre o fundo claro da tela.
   return (
     <Modal
       visible={props.visible}
@@ -63,6 +66,7 @@ export default function ReportRelatoModal(props: ReportRelatoModalProps) {
       navigationBarTranslucent
     >
       <SafeAreaProvider>
+        <StatusBar style="dark" />
         <ReportRelatoContent {...props} />
       </SafeAreaProvider>
     </Modal>

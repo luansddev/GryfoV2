@@ -31,6 +31,7 @@ import { useLocalSearchParams } from 'expo-router';
 import { useSharedMap } from '../../context/SharedMapContext';
 import { useVigias, Vigia } from '../../context/VigiasContext';
 import { getCrimeIcon, formatCrimeName } from '../../constants/CrimeData';
+import { getFloatingControlsBottom } from '../../constants/Layout';
 
 /* ================= TYPES ================= */
 
@@ -46,6 +47,7 @@ const RADIUS_DEFAULT = 500;
 export default function Locais() {
   const { setIsCreatingVigia } = useVigiaCreation();
   const insets = useSafeAreaInsets();
+  const floatingControlsBottom = getFloatingControlsBottom(insets.bottom);
   const params = useLocalSearchParams();
   const [userLocation, setUserLocation] = useState<Location.LocationObject | null>(null);
   const [loading, setLoading] = useState(true);
@@ -750,7 +752,7 @@ export default function Locais() {
 
         {/* ================= OVERLAY: MODO IDLE — BOTÕES DE AÇÃO ================= */}
         {uiMode === 'idle' && (
-          <View style={styles.idleControls} pointerEvents="box-none">
+          <View style={[styles.idleControls, { bottom: floatingControlsBottom }]} pointerEvents="box-none">
             {/* Botão "Meu local" */}
             <View style={styles.fabRow}>
               <TouchableOpacity
@@ -809,7 +811,7 @@ export default function Locais() {
       {/* ================= PAINEL RETRÁTIL: MEUS VIGIAS ================= */}
       <Animated.ScrollView
         style={[styles.scrollViewContainer, animatedScrollStyle]}
-        contentContainerStyle={{ paddingBottom: 130, paddingTop: 14 }}
+        contentContainerStyle={{ paddingBottom: Math.max(130, floatingControlsBottom + 10), paddingTop: 14 }}
       >
         {/* Header do painel */}
         <View style={styles.panelHeader}>
@@ -1234,7 +1236,6 @@ const styles = StyleSheet.create({
   /* ================= MODO IDLE — BOTÕES ================= */
   idleControls: {
     position: 'absolute',
-    bottom: 120,
     left: 0,
     right: 0,
     alignItems: 'center',

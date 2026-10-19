@@ -10,6 +10,7 @@ import Animated, {
   useAnimatedStyle,
   withSpring,
 } from 'react-native-reanimated';
+import { getBottomMenuBottom } from '../src/constants/Layout';
 
 const tabs = [
   { name: 'home', icon: 'map', size: 20, family: 'Feather' },
@@ -23,41 +24,47 @@ const TAB_GAP = 16;
 const TAB_STEP = TAB_WIDTH + TAB_GAP; // 64
 const TOTAL_TABS_WIDTH = tabs.length * TAB_WIDTH + (tabs.length - 1) * TAB_GAP; // 240
 
-function getActiveIndex(pathname: string): number {
-  return tabs.findIndex(
-    (tab) => pathname === `/${tab.name}` || (tab.name === 'home' && pathname === '/biblioteca')
-  );
+interface BottomMenuProps {
+  state?: any;
+  navigation?: any;
+  descriptors?: any;
+  insets?: any;
 }
 
-export default function BottomMenu() {
+function getActiveIndex(state: any, pathname: string): number {
+  if (state?.routes && typeof state.index === 'number') {
+    const routeName = state.routes[state.index]?.name;
+    if (routeName === 'biblioteca') return 0;
+    const found = tabs.findIndex((tab) => tab.name === routeName);
+    if (found >= 0) return found;
+  }
+
+  const clean = (pathname || '').split('?')[0].replace(/\/$/, '');
+  if (clean === '/biblioteca' || clean === 'biblioteca') return 0;
+  const pathIndex = tabs.findIndex((tab) => clean === `/${tab.name}` || clean === tab.name);
+  return pathIndex >= 0 ? pathIndex : 0;
+}
+
+export default function BottomMenu({ state, navigation }: BottomMenuProps) {
   const pathname = usePathname();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { unreadCount } = useVigias();
 
-  const activeIndex = getActiveIndex(pathname);
-  const initialIndex = activeIndex >= 0 ? activeIndex : 0;
-  const translateX = useSharedValue(initialIndex * TAB_STEP);
-  const isFirstRender = useRef(true);
-  const targetIndexRef = useRef(initialIndex);
+  const activeIndex = getActiveIndex(state, pathname);
+  const translateX = useSharedValue(activeIndex * TAB_STEP);
+  const prevIndexRef = useRef(activeIndex);
 
   useEffect(() => {
-    const idx = getActiveIndex(pathname);
-    if (idx >= 0) {
-      if (isFirstRender.current) {
-        isFirstRender.current = false;
-        targetIndexRef.current = idx;
-        translateX.value = idx * TAB_STEP;
-      } else if (targetIndexRef.current !== idx) {
-        targetIndexRef.current = idx;
-        translateX.value = withSpring(idx * TAB_STEP, {
-          damping: 18,
-          stiffness: 180,
-          mass: 0.8,
-        });
-      }
+    if (activeIndex !== prevIndexRef.current) {
+      prevIndexRef.current = activeIndex;
+      translateX.value = withSpring(activeIndex * TAB_STEP, {
+        damping: 18,
+        stiffness: 180,
+        mass: 0.8,
+      });
     }
-  }, [pathname, translateX]);
+  }, [activeIndex]);
 
   const capsuleAnimatedStyle = useAnimatedStyle(() => ({
     transform: [{ translateX: translateX.value }],
@@ -68,25 +75,34 @@ export default function BottomMenu() {
   }));
 
   const handleTabPress = (tabName: string, index: number) => {
-    const currentIndex = getActiveIndex(pathname);
-    if (currentIndex === index && targetIndexRef.current === index) return;
-
-    targetIndexRef.current = index;
+    prevIndexRef.current = index;
     translateX.value = withSpring(index * TAB_STEP, {
       damping: 18,
       stiffness: 180,
       mass: 0.8,
     });
 
-    requestAnimationFrame(() => {
-      if (pathname !== `/${tabName}`) {
-        router.navigate(`/${tabName}` as any);
+    if (navigation && state?.routes) {
+      const currentRouteName = state.routes[state.index]?.name;
+      const isFocused = currentRouteName === tabName;
+      const route = state.routes.find((r: any) => r.name === tabName);
+
+      const event = navigation.emit({
+        type: 'tabPress',
+        target: route?.key || tabName,
+        canPreventDefault: true,
+      });
+
+      if (!isFocused && !event.defaultPrevented) {
+        navigation.navigate(tabName);
       }
-    });
+    } else {
+      router.navigate(`/${tabName}` as any);
+    }
   };
 
   return (
-    <View style={[styles.floatingWrapper, { bottom: Math.max(insets.bottom + 20, 30) }]}>
+    <View style={[styles.floatingWrapper, { bottom: getBottomMenuBottom(insets.bottom) }]}>
       <View style={styles.container}>
         {/* Camada 1: Ícones escuros na base da navbar */}
         <View style={styles.tabsRow} pointerEvents="none">

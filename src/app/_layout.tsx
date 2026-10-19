@@ -11,6 +11,7 @@ import { onAuthStateChanged } from 'firebase/auth';
 import { auth } from '../config/firebaseConfig';
 import { SharedMapProvider } from '../context/SharedMapContext';
 import { VigiasProvider, useVigias } from '../context/VigiasContext';
+import { StatusBar } from 'expo-status-bar';
 import { addNotificationTapListener } from '../services/notifications/localNotifications';
 
 SplashScreen.preventAutoHideAsync();
@@ -20,6 +21,21 @@ export default function RootLayout() {
   const router = useRouter();
   const segments = useSegments();
   const [user, setUser] = useState<any>(undefined);
+
+  // Telas com topo escuro: conta, index, login, cadastro.
+  // Em todas as outras (home, analise, notificacoes, biblioteca), o topo é branco/claro e requer ícones escuros (style="dark").
+  const firstSegment = (segments as string[])[0];
+  const isDarkScreen =
+    pathname === '/' ||
+    pathname === '/index' ||
+    pathname?.startsWith('/login') ||
+    pathname?.startsWith('/cadastro') ||
+    pathname?.startsWith('/conta') ||
+    firstSegment === 'login' ||
+    firstSegment === 'cadastro' ||
+    firstSegment === 'conta' ||
+    firstSegment === 'index' ||
+    !firstSegment;
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (authUser) => {
@@ -71,7 +87,7 @@ export default function RootLayout() {
     return () => clearTimeout(timeout);
   }, []);
 
-  const renderTabBar = useCallback(() => <BottomMenuWrapper />, []);
+  const renderTabBar = useCallback((props: any) => <BottomMenuWrapper {...props} />, []);
 
   // Obs.: não retornamos null enquanto as fontes carregam. O navegador precisa estar
   // montado desde o início para o expo-router processar o link inicial; a splash
@@ -82,6 +98,7 @@ export default function RootLayout() {
     <VigiasProvider>
     <SearchLocationProvider>
     <SharedMapProvider>
+      <StatusBar style={isDarkScreen ? 'light' : 'dark'} />
       <VigiaNotificationTapHandler />
       <View style={styles.container}>
       <View style={styles.content}>
@@ -106,15 +123,23 @@ export default function RootLayout() {
 }
 
 // Wrapper que esconde o BottomMenu durante criação de vigia ou em telas sem menu
-function BottomMenuWrapper() {
+function BottomMenuWrapper(props: any) {
   const pathname = usePathname();
   const { isCreatingVigia } = useVigiaCreation();
   const hideMenuRoutes = ['/', '/cadastro', '/login'];
 
-  if (hideMenuRoutes.includes(pathname) || isCreatingVigia) {
+  const currentRouteName = props?.state?.routes?.[props?.state?.index]?.name;
+  const isHiddenRoute =
+    hideMenuRoutes.includes(pathname) ||
+    currentRouteName === 'index' ||
+    currentRouteName === 'cadastro' ||
+    currentRouteName === 'login' ||
+    isCreatingVigia;
+
+  if (isHiddenRoute) {
     return null;
   }
-  return <BottomMenu />;
+  return <BottomMenu {...props} />;
 }
 
 // Ao tocar numa notificação de vigia no sistema, leva o usuário ao relato no mapa

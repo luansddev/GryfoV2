@@ -33,6 +33,8 @@ import {
   getCrimeIcon,
   mapNatureOptions,
 } from '../../constants/CrimeData';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { getFloatingControlsBottom } from '../../constants/Layout';
 
 /* ================= CHAVES E FORMATADORES ================= */
 
@@ -231,6 +233,8 @@ export default function Dados() {
     };
   });
 
+  const insets = useSafeAreaInsets();
+  const floatingControlsBottom = getFloatingControlsBottom(insets.bottom);
   const { location: searchedLocation, searchMode, searchedCity, userCity } = useSearchLocation();
   const { mapRef, region: sharedRegion, registerMapChildren, activeTab } = useSharedMap();
 
@@ -817,7 +821,15 @@ export default function Dados() {
     <View style={styles.container} pointerEvents="box-none">
       <View style={{ flex: 1, zIndex: 0 }} pointerEvents="box-none">
         {/* Controles sobre o mapa (Centralizados acima da tabbar ou acima dos cards) */}
-        <View style={[styles.mapControlsWrapper, !mapExpanded && { bottom: Dimensions.get('window').height * 0.6 + 10 }]} pointerEvents="box-none">
+        <View
+          style={[
+            styles.mapControlsWrapper,
+            mapExpanded
+              ? { bottom: floatingControlsBottom }
+              : { bottom: Dimensions.get('window').height * 0.6 + 10 }
+          ]}
+          pointerEvents="box-none"
+        >
           {mapExpanded && (
             <View style={styles.fabRowContainer}>
               <TouchableOpacity
@@ -1027,7 +1039,7 @@ export default function Dados() {
       {/* ================= ÁREA INFERIOR DE CARDS (FOLHA RETRÁTIL) ================= */}
       <Animated.ScrollView
         style={[styles.scrollViewContainer, animatedScrollStyle]}
-        contentContainerStyle={{ paddingBottom: 130, paddingTop: 14 }}
+        contentContainerStyle={{ paddingBottom: Math.max(130, floatingControlsBottom + 10), paddingTop: 14 }}
       >
         {/* SELETOR DE CATEGORIAS VIA DROPDOWN ESTILIZADO */}
         {(() => {
@@ -1392,7 +1404,6 @@ const styles = StyleSheet.create({
   /* ================= MAP CONTROLS & LEGENDA ================= */
   mapControlsWrapper: {
     position: 'absolute',
-    bottom: 120,
     alignSelf: 'center',
     alignItems: 'stretch',
   },

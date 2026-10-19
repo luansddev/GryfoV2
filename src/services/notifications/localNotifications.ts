@@ -92,6 +92,7 @@ export async function presentLocalNotification(
         body,
         data: data as unknown as Record<string, unknown>,
         sound: 'default',
+        color: '#1d4ed8',
       },
       trigger: Platform.OS === 'android' ? { channelId: VIGIA_CHANNEL_ID } : null,
     });
