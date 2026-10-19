@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
+import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import {
   StyleSheet,
   View,
@@ -29,9 +29,11 @@ import { useVigiaCreation } from '../../context/VigiaCreationContext';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams } from 'expo-router';
 import { useSharedMap } from '../../context/SharedMapContext';
-import { useVigias, Vigia } from '../../context/VigiasContext';
+import { useVigias, Vigia, VigiaNotification } from '../../context/VigiasContext';
 import { getCrimeIcon, formatCrimeName } from '../../constants/CrimeData';
 import { getFloatingControlsBottom } from '../../constants/Layout';
+import { onAuthStateChanged } from 'firebase/auth';
+import { auth } from '../../config/firebaseConfig';
 
 /* ================= TYPES ================= */
 
@@ -41,6 +43,85 @@ const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const RADIUS_MIN = 100;
 const RADIUS_MAX = 2000;
 const RADIUS_DEFAULT = 500;
+
+const formatRadiusHelper = (r: number) => {
+  if (r >= 1000) return `${(r / 1000).toFixed(1)} km`;
+  return `${r} m`;
+};
+
+// Subcomponente dedicado para garantir renderização correta do bitmap customizado no Android (sem cair no marcador vermelho padrão)
+const VigiaMapMarker = React.memo(({ vigia }: { vigia: Vigia }) => {
+  const [tracksViewChanges, setTracksViewChanges] = useState(true);
+
+  useEffect(() => {
+    setTracksViewChanges(true);
+    const timer = setTimeout(() => {
+      setTracksViewChanges(false);
+    }, 600);
+    return () => clearTimeout(timer);
+  }, [vigia.id, vigia.latitude, vigia.longitude, vigia.name, vigia.radius]);
+
+  return (
+    <Marker
+      key={`locais-marker-${vigia.id}`}
+      identifier={`locais-marker-${vigia.id}`}
+      coordinate={{ latitude: vigia.latitude, longitude: vigia.longitude }}
+      title={vigia.name}
+      description={`Raio: ${formatRadiusHelper(vigia.radius)}`}
+      anchor={{ x: 0.5, y: 0.5 }}
+      tracksViewChanges={tracksViewChanges}
+    >
+      <View style={styles.vigiaMarkerWrapper} collapsable={false}>
+        <Svg width={36} height={36} viewBox="0 0 36 36">
+          <SvgCircle cx="18" cy="18" r="13" fill="#1d4ed8" stroke="#fff" strokeWidth={2.5} />
+          <Path
+            transform="translate(2, 2)"
+            d="M16 11C12.8 11 10.1 13 9 16c1.1 3 3.8 5 7 5s5.9-2 7-5c-1.1-3-3.8-5-7-5zm0 8.5a3.5 3.5 0 110-7 3.5 3.5 0 010 7zm0-5.5a2 2 0 100 4 2 2 0 000-4z"
+            fill="#fff"
+          />
+        </Svg>
+      </View>
+    </Marker>
+  );
+});
+
+const VigiaRelatoMarker = React.memo(({ notification }: { notification: VigiaNotification }) => {
+  const [tracksViewChanges, setTracksViewChanges] = useState(true);
+
+  useEffect(() => {
+    setTracksViewChanges(true);
+    const timer = setTimeout(() => {
+      setTracksViewChanges(false);
+    }, 600);
+    return () => clearTimeout(timer);
+  }, [notification.id, notification.latitude, notification.longitude]);
+
+  const color = notification.crimeKey ? getCrimeIcon(notification.crimeKey).color : '#64748b';
+
+  return (
+    <Marker
+      key={`vigia-relato-${notification.id}`}
+      identifier={`vigia-relato-${notification.id}`}
+      coordinate={{ latitude: notification.latitude, longitude: notification.longitude }}
+      title={notification.crimeKey ? formatCrimeName(notification.crimeKey) : 'Novo relato'}
+      description={notification.texto}
+      anchor={{ x: 0.5, y: 1 }}
+      tracksViewChanges={tracksViewChanges}
+    >
+      <View style={{ alignItems: 'center', justifyContent: 'center', width: 44, height: 44 }} collapsable={false}>
+        <Svg width={36} height={36} viewBox="-2 -2 28 28">
+          <Path
+            d="M2 4c0-1.1.9-2 2-2h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2h-6l-2 6-2-6H4c-1.1 0-2-.9-2-2V4z"
+            fill={color}
+            stroke="#ffffff"
+            strokeWidth={2}
+            strokeLinejoin="round"
+          />
+        </Svg>
+      </View>
+    </Marker>
+  );
+});
 
 /* ================= COMPONENTE PRINCIPAL ================= */
 
@@ -94,19 +175,27 @@ export default function Locais() {
   // Keyboard tracking
   const [keyboardHeight, setKeyboardHeight] = useState(0);
 
-  // Controle de renderização dos marcadores no Google Maps (Android)
-  const [tracksViewChanges, setTracksViewChanges] = useState(true);
-
+  // Reseta estado local de criação quando o estado de autenticação mudar (ex: logout)
   useEffect(() => {
-    if (tracksViewChanges) {
-      const timer = setTimeout(() => {
-        setTracksViewChanges(false);
-      }, 1500);
-      return () => clearTimeout(timer);
-    }
-  }, [tracksViewChanges, vigias]);
+    const unsubscribe = onAuthStateChanged(auth, () => {
+      setUiMode('idle');
+      setSelectedPoint(null);
+      setSearchedPoint(null);
+      setVigiaName('');
+      setIsCreatingVigia(false);
+    });
+    return unsubscribe;
+  }, [setIsCreatingVigia]);
 
   const { mapRef, region: sharedRegion, registerMapChildren, setMapPressHandler, setMapInteractionEnabled, userLocation: sharedUserLocation, activeTab } = useSharedMap();
+
+  // Limpa markers do mapa ao desmontar
+  useEffect(() => {
+    return () => {
+      registerMapChildren('locais', null);
+      registerMapChildren('locais_persistent', null);
+    };
+  }, [registerMapChildren]);
 
   // Animated panel
   const translateY = useSharedValue(SCREEN_HEIGHT);
@@ -211,26 +300,7 @@ export default function Locais() {
       <>
         {/* Vigias salvos — Marcadores */}
         {vigias.map(vigia => (
-          <Marker
-            key={`locais-marker-${vigia.id}`}
-            identifier={`locais-marker-${vigia.id}`}
-            coordinate={{ latitude: vigia.latitude, longitude: vigia.longitude }}
-            title={vigia.name}
-            description={`Raio: ${formatRadius(vigia.radius)}`}
-            anchor={{ x: 0.5, y: 0.5 }}
-            tracksViewChanges={tracksViewChanges}
-          >
-            <View style={styles.vigiaMarkerWrapper} collapsable={false}>
-              <Svg width={36} height={36} viewBox="0 0 36 36">
-                <SvgCircle cx="18" cy="18" r="13" fill="#1d4ed8" stroke="#fff" strokeWidth={2.5} />
-                <Path
-                  transform="translate(2, 2)"
-                  d="M16 11C12.8 11 10.1 13 9 16c1.1 3 3.8 5 7 5s5.9-2 7-5c-1.1-3-3.8-5-7-5zm0 8.5a3.5 3.5 0 110-7 3.5 3.5 0 010 7zm0-5.5a2 2 0 100 4 2 2 0 000-4z"
-                  fill="#fff"
-                />
-              </Svg>
-            </View>
-          </Marker>
+          <VigiaMapMarker key={`locais-marker-${vigia.id}`} vigia={vigia} />
         ))}
 
         {/* Marcador Temporário de Pesquisa (Target) */}
@@ -271,36 +341,13 @@ export default function Locais() {
         )}
 
         {/* Relatos capturados pelos vigias (notificações) */}
-        {notifications.filter(n => n.type === 'vigia_relato').map(n => {
-          const color = n.crimeKey ? getCrimeIcon(n.crimeKey).color : '#64748b';
-          return (
-            <Marker
-              key={`vigia-relato-${n.id}`}
-              identifier={`vigia-relato-${n.id}`}
-              coordinate={{ latitude: n.latitude, longitude: n.longitude }}
-              title={n.crimeKey ? formatCrimeName(n.crimeKey) : 'Novo relato'}
-              description={n.texto}
-              anchor={{ x: 0.5, y: 1 }}
-              tracksViewChanges={tracksViewChanges}
-            >
-              <View style={{ alignItems: 'center', justifyContent: 'center', width: 44, height: 44 }} collapsable={false}>
-                <Svg width={36} height={36} viewBox="-2 -2 28 28">
-                  <Path
-                    d="M2 4c0-1.1.9-2 2-2h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2h-6l-2 6-2-6H4c-1.1 0-2-.9-2-2V4z"
-                    fill={color}
-                    stroke="#ffffff"
-                    strokeWidth={2}
-                    strokeLinejoin="round"
-                  />
-                </Svg>
-              </View>
-            </Marker>
-          );
-        })}
+        {notifications.filter(n => n.type === 'vigia_relato').map(n => (
+          <VigiaRelatoMarker key={`vigia-relato-${n.id}`} notification={n} />
+        ))}
       </>
     ) : null;
     registerMapChildren('locais', markersToRender);
-  }, [vigias, tracksViewChanges, uiMode, searchedPoint, selectedPoint, vigiaRadius, registerMapChildren, activeTab, notifications]);
+  }, [vigias, uiMode, searchedPoint, selectedPoint, vigiaRadius, registerMapChildren, activeTab, notifications]);
 
   /* ================= PERSISTÊNCIA ================= */
 
@@ -507,6 +554,7 @@ export default function Locais() {
       radius: vigiaRadius,
       address: finalAddress,
       createdAt: Date.now(),
+      userId: auth.currentUser?.uid || undefined,
     };
 
     const updated = [...vigias, newVigia];

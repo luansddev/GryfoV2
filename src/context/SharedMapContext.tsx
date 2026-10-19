@@ -1,6 +1,8 @@
 import React, { createContext, useContext, useRef, useState, useEffect, useCallback, ReactNode } from 'react';
 import MapView, { Region, MapPressEvent } from 'react-native-maps';
 import * as Location from 'expo-location';
+import { onAuthStateChanged } from 'firebase/auth';
+import { auth } from '../config/firebaseConfig';
 
 interface SharedMapContextType {
   mapRef: React.RefObject<MapView | null>;
@@ -26,6 +28,9 @@ interface SharedMapContextType {
   // Track if we are currently creating a relato
   isCreatingRelato: boolean;
   setIsCreatingRelato: (isCreating: boolean) => void;
+
+  // Dynamic key to remount the native map when switching users
+  mapKey: string;
 }
 
 const SharedMapContext = createContext<SharedMapContextType>(null as any);
@@ -43,10 +48,32 @@ export function SharedMapProvider({ children }: { children: ReactNode }) {
   const [locationLoading, setLocationLoading] = useState(true);
   const [mapInteractionEnabled, setMapInteractionEnabled] = useState(true);
   const [isCreatingRelato, setIsCreatingRelato] = useState(false);
+  const [authUid, setAuthUid] = useState<string | null>(auth.currentUser?.uid ?? null);
+  const [mapSession, setMapSession] = useState(0);
 
   /* ================= MARKER REGISTRATION ================= */
   const markersStore = useRef<{ [key: string]: ReactNode }>({});
   const [, setMarkersVersion] = useState(0);
+
+  /* ================= AUTH CHANGE LISTENER ================= */
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      const nextUid = user?.uid ?? null;
+      setAuthUid((prevUid) => {
+        if (prevUid !== nextUid) {
+          markersStore.current = {};
+          mapPressHandlers.current = {};
+          setActiveTab(0);
+          setMapSession((s) => s + 1);
+          setMarkersVersion((v) => v + 1);
+        }
+        return nextUid;
+      });
+    });
+    return unsubscribe;
+  }, []);
+
+  const mapKey = `shared-google-map-${authUid || 'guest'}-${mapSession}`;
 
   const registerMapChildren = useCallback((key: string, markerChildren: ReactNode) => {
     markersStore.current[key] = markerChildren;
@@ -134,6 +161,7 @@ export function SharedMapProvider({ children }: { children: ReactNode }) {
       setMapInteractionEnabled,
       isCreatingRelato,
       setIsCreatingRelato,
+      mapKey,
     }}>
       {children}
     </SharedMapContext.Provider>

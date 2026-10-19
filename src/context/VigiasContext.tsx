@@ -17,6 +17,7 @@ export interface Vigia {
   radius: number; // em metros
   createdAt: number;
   address?: string;
+  userId?: string;
 }
 
 export type NotificationType = 'vigia_relato' | 'upvote_milestone' | 'report_received';
@@ -121,7 +122,9 @@ export function VigiasProvider({ children }: { children: React.ReactNode }) {
     getDeviceId().then(setDeviceId);
   }, []);
 
-  const ownerKey = authUid || deviceId;
+  // Vigias e notificações pertencem estritamente à conta logada (authUid).
+  // Se não houver usuário logado, ownerKey é null e nenhum dado alheio é exibido.
+  const ownerKey = authUid;
 
   // Refs para o listener do Firestore sempre enxergar o estado mais recente
   const vigiasRef = useRef<Vigia[]>([]);
@@ -144,10 +147,11 @@ export function VigiasProvider({ children }: { children: React.ReactNode }) {
 
   const saveVigias = useCallback(async (next: Vigia[]) => {
     if (!ownerKey) return;
-    vigiasRef.current = next;
-    setVigias(next);
+    const tagged = next.map(v => ({ ...v, userId: v.userId || ownerKey }));
+    vigiasRef.current = tagged;
+    setVigias(tagged);
     try {
-      await AsyncStorage.setItem(`@gardio_vigias_${ownerKey}`, JSON.stringify(next));
+      await AsyncStorage.setItem(`@gardio_vigias_${ownerKey}`, JSON.stringify(tagged));
     } catch (e) {
       console.warn('Erro ao salvar vigias:', e);
     }
@@ -156,7 +160,16 @@ export function VigiasProvider({ children }: { children: React.ReactNode }) {
   /* ---------- Carregamento inicial ---------- */
 
   useEffect(() => {
-    if (!ownerKey) return;
+    if (!ownerKey) {
+      vigiasRef.current = [];
+      setVigias([]);
+      notificationsRef.current = [];
+      setNotifications([]);
+      processedRelatosRef.current.clear();
+      setVigiasLoaded(false);
+      setNotificationsLoaded(false);
+      return;
+    }
 
     let mounted = true;
     setVigiasLoaded(false);
@@ -173,8 +186,9 @@ export function VigiasProvider({ children }: { children: React.ReactNode }) {
 
         if (storedVigias) {
           const parsed: Vigia[] = JSON.parse(storedVigias);
-          vigiasRef.current = parsed;
-          setVigias(parsed);
+          const userVigias = parsed.filter(v => !v.userId || v.userId === ownerKey);
+          vigiasRef.current = userVigias;
+          setVigias(userVigias);
         } else {
           vigiasRef.current = [];
           setVigias([]);
@@ -207,7 +221,19 @@ export function VigiasProvider({ children }: { children: React.ReactNode }) {
   }, [ownerKey]);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, user => setAuthUid(user?.uid ?? null));
+    const unsubscribe = onAuthStateChanged(auth, user => {
+      const nextUid = user?.uid ?? null;
+      setAuthUid(nextUid);
+      if (!nextUid) {
+        vigiasRef.current = [];
+        setVigias([]);
+        notificationsRef.current = [];
+        setNotifications([]);
+        processedRelatosRef.current.clear();
+        setVigiasLoaded(false);
+        setNotificationsLoaded(false);
+      }
+    });
     return unsubscribe;
   }, []);
 

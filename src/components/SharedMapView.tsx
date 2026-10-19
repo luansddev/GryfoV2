@@ -36,7 +36,8 @@ export default function SharedMapView() {
     getMapChildren,
     handleMapPress,
     mapInteractionEnabled,
-    userLocation
+    userLocation,
+    mapKey,
   } = useSharedMap();
 
   // Tab key mappings: 0=dados, 1=relatos, 2=locais
@@ -52,7 +53,7 @@ export default function SharedMapView() {
   return (
     <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
       <MapView
-        key="shared-google-map-v3"
+        key={mapKey}
         ref={mapRef}
         style={StyleSheet.absoluteFill}
         provider={PROVIDER_GOOGLE}

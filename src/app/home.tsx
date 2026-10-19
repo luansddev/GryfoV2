@@ -11,7 +11,9 @@ import FontAwesome6 from '@expo/vector-icons/FontAwesome6';
 import Animated, { LinearTransition, FadeIn, FadeOut } from 'react-native-reanimated';
 import { useVigiaCreation } from '../context/VigiaCreationContext';
 import { useSharedMap } from '../context/SharedMapContext';
-import { useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams, useFocusEffect } from 'expo-router';
+import { onAuthStateChanged } from 'firebase/auth';
+import { auth } from '../config/firebaseConfig';
 import SharedMapView from '../components/SharedMapView';
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
@@ -70,6 +72,23 @@ export function HomeContent() {
       handleTabPress(2);
     }
   }, [params.switchTab, handleTabPress]);
+
+  // Garante que o mapa compartilhado sempre esteja sincronizado com a aba atual ao focar na Home
+  useFocusEffect(
+    useCallback(() => {
+      setActiveTab(indexRef.current);
+    }, [setActiveTab])
+  );
+
+  // Ao trocar de usuário ou deslogar, reseta a Home para a primeira aba (Dados)
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, () => {
+      setIndex(0);
+      setActiveTab(0);
+      animateToTab(0);
+    });
+    return unsubscribe;
+  }, [setActiveTab, animateToTab]);
 
   const stateRef = useRef({ isCreatingVigia, isCreatingRelato, handleTabPress });
   useEffect(() => {
