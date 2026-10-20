@@ -3,6 +3,7 @@ import { Tabs, usePathname, useRouter, useSegments } from 'expo-router';
 import { useFonts } from 'expo-font';
 import * as SplashScreen from 'expo-splash-screen';
 import { useEffect, useState, useCallback } from 'react';
+import { Feather, AntDesign, Ionicons } from '@expo/vector-icons';
 import BottomMenu from '../../components/BottomMenu';
 import { View, StyleSheet } from 'react-native';
 import { SearchLocationProvider } from '../context/SearchLocationContext';
@@ -72,6 +73,9 @@ export default function RootLayout() {
   }, [user, isAuthScreen, authReady]);
 
   const [fontsLoaded, error] = useFonts({
+    ...Feather.font,
+    ...AntDesign.font,
+    ...Ionicons.font,
     'Avant': require('../../assets/fontes/AvantGarde-Bold.otf'),
     'GlacialB': require('../../assets/fontes/GlacialIndifference-Bold.otf'),
     'GlaicalI': require('../../assets/fontes/GlacialIndifference-Italic.otf'),
@@ -111,7 +115,20 @@ export default function RootLayout() {
       <VigiaNotificationTapHandler />
       <View style={styles.container}>
       <View style={styles.content}>
-        <Tabs tabBar={renderTabBar} screenOptions={{ headerShown: false }}>
+        <Tabs
+          tabBar={renderTabBar}
+          backBehavior="history"
+          screenOptions={{
+            headerShown: false,
+            animation: 'fade',
+            transitionSpec: {
+              animation: 'timing',
+              config: {
+                duration: 200,
+              },
+            },
+          }}
+        >
           <Tabs.Screen name="index" />
           <Tabs.Screen name="login" />
           <Tabs.Screen name="cadastro" />

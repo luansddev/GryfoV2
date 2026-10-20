@@ -18,13 +18,14 @@ import {
 } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { auth, db } from '../config/firebaseConfig';
-import { signOut } from 'firebase/auth';
+import { signOut, EmailAuthProvider, reauthenticateWithCredential, deleteUser } from 'firebase/auth';
 import { FontAwesome6 } from '@expo/vector-icons';
 import { useVigias } from '../context/VigiasContext';
-import { collection, query, where, getCountFromServer, doc, getDoc, updateDoc, setDoc } from 'firebase/firestore';
+import { collection, query, where, getCountFromServer, doc, getDoc, updateDoc, setDoc, deleteDoc } from 'firebase/firestore';
 import { getDeviceId } from '../utils/device';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const { width, height } = Dimensions.get('window');
 const AnimatedImageBackground = Animated.createAnimatedComponent(ImageBackground);
@@ -40,6 +41,14 @@ export default function Conta() {
   const [isEditNameModalVisible, setIsEditNameModalVisible] = useState(false);
   const [newName, setNewName] = useState('');
   const [isSavingName, setIsSavingName] = useState(false);
+
+  // Estados para exclusão de conta com confirmação por senha
+  const [isDeleteModalVisible, setIsDeleteModalVisible] = useState(false);
+  const [deletePassword, setDeletePassword] = useState('');
+  const [showDeletePassword, setShowDeletePassword] = useState(false);
+  const [deleteError, setDeleteError] = useState('');
+  const [isDeletingAccount, setIsDeletingAccount] = useState(false);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
 
   const user = auth.currentUser;
 
@@ -61,6 +70,74 @@ export default function Conta() {
       Alert.alert("Erro", "Não foi possível atualizar o nome.");
     } finally {
       setIsSavingName(false);
+    }
+  };
+
+  const handleConfirmDeleteAccount = async () => {
+    if (!deletePassword.trim()) {
+      setDeleteError("Por favor, digite sua senha para prosseguir.");
+      return;
+    }
+
+    const currentUser = auth.currentUser;
+    if (!currentUser || !currentUser.email) {
+      setDeleteError("Não foi possível identificar o usuário. Tente fazer login novamente.");
+      return;
+    }
+
+    setIsDeletingAccount(true);
+    setDeleteError("");
+
+    try {
+      const uid = currentUser.uid;
+
+      // 1. Reautentica com email e senha para garantir que o usuário é o dono da conta
+      const credential = EmailAuthProvider.credential(currentUser.email, deletePassword);
+      await reauthenticateWithCredential(currentUser, credential);
+
+      // 2. Remove documento do usuário no Firestore
+      try {
+        await deleteDoc(doc(db, 'users', uid));
+      } catch (firestoreErr) {
+        console.warn("Aviso ao remover documento do usuário no Firestore:", firestoreErr);
+      }
+
+      // 3. Limpa dados locais associados a esse usuário
+      try {
+        await AsyncStorage.multiRemove([
+          `@vigias_${uid}`,
+          `@notifications_${uid}`,
+        ]);
+      } catch (storageErr) {
+        console.warn("Aviso ao limpar AsyncStorage do usuário:", storageErr);
+      }
+
+      // 4. Deleta o usuário no Firebase Authentication
+      await deleteUser(currentUser);
+
+      setIsLoggingOut(true);
+      setIsDeleteModalVisible(false);
+      setDeletePassword("");
+
+      Alert.alert(
+        "Conta excluída",
+        "Sua conta e seus dados foram excluídos com sucesso.",
+        [{ text: "OK", onPress: () => router.replace('/') }]
+      );
+    } catch (err: any) {
+      console.error("Erro ao excluir conta:", err);
+      const code = err?.code;
+      if (code === 'auth/wrong-password' || code === 'auth/invalid-credential') {
+        setDeleteError("Senha incorreta. Verifique e tente novamente.");
+      } else if (code === 'auth/too-many-requests') {
+        setDeleteError("Muitas tentativas sem sucesso. Aguarde um momento e tente novamente.");
+      } else if (code === 'auth/requires-recent-login') {
+        setDeleteError("Sessão expirada. Por favor, saia e entre novamente antes de excluir a conta.");
+      } else {
+        setDeleteError(err?.message || "Ocorreu um erro ao excluir a conta. Tente novamente.");
+      }
+    } finally {
+      setIsDeletingAccount(false);
     }
   };
   const isAnonymous = !user;
@@ -86,6 +163,7 @@ export default function Conta() {
   );
 
   useEffect(() => {
+    if (isLoggingOut || !user) return;
     let isMounted = true;
 
     const fetchUserDataAndCounts = async () => {
@@ -124,17 +202,25 @@ export default function Conta() {
     return () => {
       isMounted = false;
     };
-  }, [user]);
+  }, [user, isLoggingOut]);
 
-  const handleLogout = async () => {
+  const handleLogout = () => {
     try {
-      await signOut(auth);
+      setIsLoggingOut(true);
       router.replace('/');
+      signOut(auth).catch((error) => {
+        console.error("Erro ao deslogar:", error);
+      });
     } catch (error) {
       console.error("Erro ao deslogar:", error);
+      setIsLoggingOut(false);
       Alert.alert("Erro", "Não foi possível deslogar no momento.");
     }
   };
+
+  if (isLoggingOut || (!user && !isDeletingAccount)) {
+    return <View style={styles.container} />;
+  }
 
   return (
     <View style={styles.container}>
@@ -217,7 +303,7 @@ export default function Conta() {
             <View style={styles.sectionContainer}>
               <Text style={styles.sectionTitle}>Participação na Comunidade</Text>
               <View style={styles.metricsRow}>
-                <TouchableOpacity style={styles.metricCard} onPress={() => router.push('/biblioteca')} activeOpacity={0.7}>
+                <TouchableOpacity style={styles.metricCard} onPress={() => router.push({ pathname: '/biblioteca', params: { from: 'conta' } })} activeOpacity={0.7}>
                   <View style={styles.metricIconContainer}>
                     <FontAwesome6 name="comment-dots" size={18} color="#3b82f6" />
                   </View>
@@ -255,9 +341,26 @@ export default function Conta() {
 
             {/* Logout Button */}
             <TouchableOpacity style={styles.logoutButton} onPress={handleLogout} activeOpacity={0.8}>
-              <FontAwesome6 name="arrow-right-from-bracket" size={16} color="#ef4444" style={styles.logoutIcon} />
+              <FontAwesome6 name="arrow-right-from-bracket" size={16} color="rgba(255,255,255,0.7)" style={styles.logoutIcon} />
               <Text style={styles.logoutText}>{isAnonymous ? 'Fazer Login' : 'Sair da conta'}</Text>
             </TouchableOpacity>
+
+            {/* Excluir Conta (apenas para contas autenticadas) */}
+            {!isAnonymous && (
+              <TouchableOpacity
+                style={styles.deleteAccountButton}
+                onPress={() => {
+                  setDeletePassword('');
+                  setDeleteError('');
+                  setShowDeletePassword(false);
+                  setIsDeleteModalVisible(true);
+                }}
+                activeOpacity={0.8}
+              >
+                <FontAwesome6 name="trash-can" size={15} color="#ef4444" style={styles.deleteIcon} />
+                <Text style={styles.deleteAccountText}>Excluir conta</Text>
+              </TouchableOpacity>
+            )}
             
             <Text style={styles.versionText}>Versão 1.0.0</Text>
           </Animated.View>
@@ -296,6 +399,103 @@ export default function Conta() {
                   <ActivityIndicator size="small" color="#fff" />
                 ) : (
                   <Text style={styles.modalSaveText}>Salvar</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
+
+      {/* Modal de Exclusão de Conta com Confirmação por Senha */}
+      <Modal
+        visible={isDeleteModalVisible}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => {
+          if (!isDeletingAccount) setIsDeleteModalVisible(false);
+        }}
+      >
+        <KeyboardAvoidingView 
+          style={styles.modalOverlay} 
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        >
+          <View style={[styles.modalContent, styles.deleteModalContent]}>
+            <View style={styles.deleteModalHeader}>
+              <View style={styles.warningIconBadge}>
+                <FontAwesome6 name="triangle-exclamation" size={18} color="#ef4444" />
+              </View>
+              <Text style={styles.deleteModalTitle}>Excluir Conta</Text>
+            </View>
+
+            <Text style={styles.deleteModalDescription}>
+              Esta ação é <Text style={{ color: '#ef4444', fontFamily: 'texgyB' }}>permanente e irreversível</Text>. Todos os seus dados pessoais e vigias associados serão excluídos definitivamente.
+            </Text>
+
+            <Text style={styles.inputInstruction}>
+              Para confirmar que é você, digite sua senha atual:
+            </Text>
+
+            <View style={styles.passwordInputContainer}>
+              <TextInput
+                style={styles.passwordInput}
+                value={deletePassword}
+                onChangeText={(text) => {
+                  setDeletePassword(text);
+                  if (deleteError) setDeleteError('');
+                }}
+                placeholder="Sua senha atual"
+                placeholderTextColor="rgba(255,255,255,0.4)"
+                secureTextEntry={!showDeletePassword}
+                autoCapitalize="none"
+                editable={!isDeletingAccount}
+              />
+              <TouchableOpacity
+                onPress={() => setShowDeletePassword(!showDeletePassword)}
+                style={styles.eyeBtn}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              >
+                <FontAwesome6
+                  name={showDeletePassword ? 'eye-slash' : 'eye'}
+                  size={15}
+                  color="rgba(255,255,255,0.6)"
+                />
+              </TouchableOpacity>
+            </View>
+
+            {deleteError ? (
+              <View style={styles.errorContainer}>
+                <FontAwesome6 name="circle-exclamation" size={13} color="#ef4444" style={{ marginRight: 6 }} />
+                <Text style={styles.errorText}>{deleteError}</Text>
+              </View>
+            ) : null}
+
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                style={styles.modalCancelBtn}
+                onPress={() => {
+                  if (!isDeletingAccount) {
+                    setIsDeleteModalVisible(false);
+                    setDeletePassword('');
+                    setDeleteError('');
+                  }
+                }}
+                disabled={isDeletingAccount}
+              >
+                <Text style={styles.modalCancelText}>Cancelar</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[
+                  styles.modalDeleteConfirmBtn,
+                  (!deletePassword.trim() || isDeletingAccount) && styles.btnDisabled,
+                ]}
+                onPress={handleConfirmDeleteAccount}
+                disabled={!deletePassword.trim() || isDeletingAccount}
+              >
+                {isDeletingAccount ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <Text style={styles.modalDeleteConfirmText}>Excluir definitivamente</Text>
                 )}
               </TouchableOpacity>
             </View>
@@ -545,20 +745,129 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(239, 68, 68, 0.1)',
+    backgroundColor: 'rgba(255, 255, 255, 0.06)',
     borderWidth: 1,
-    borderColor: 'rgba(239, 68, 68, 0.3)',
+    borderColor: 'rgba(255, 255, 255, 0.12)',
     height: 52,
     borderRadius: 14,
-    marginBottom: 16,
+    marginBottom: 12,
   },
   logoutIcon: {
     marginRight: 10,
   },
   logoutText: {
+    color: '#fff',
+    fontFamily: 'texgyR',
+    fontSize: 16,
+  },
+  deleteAccountButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(239, 68, 68, 0.08)',
+    borderWidth: 1,
+    borderColor: 'rgba(239, 68, 68, 0.25)',
+    height: 52,
+    borderRadius: 14,
+    marginBottom: 20,
+  },
+  deleteIcon: {
+    marginRight: 10,
+  },
+  deleteAccountText: {
     color: '#ef4444',
     fontFamily: 'texgyR',
     fontSize: 16,
+  },
+  deleteModalContent: {
+    borderColor: 'rgba(239, 68, 68, 0.3)',
+  },
+  deleteModalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 14,
+  },
+  warningIconBadge: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: 'rgba(239, 68, 68, 0.15)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  deleteModalTitle: {
+    fontSize: 20,
+    fontFamily: 'texgyB',
+    color: '#fff',
+  },
+  deleteModalDescription: {
+    fontSize: 14,
+    fontFamily: 'GlacialR',
+    color: 'rgba(255,255,255,0.7)',
+    marginBottom: 16,
+    lineHeight: 20,
+  },
+  inputInstruction: {
+    fontSize: 13,
+    fontFamily: 'texgyR',
+    color: 'rgba(255,255,255,0.85)',
+    marginBottom: 8,
+  },
+  passwordInputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.15)',
+    borderRadius: 14,
+    marginBottom: 14,
+    paddingHorizontal: 16,
+    height: 54,
+  },
+  passwordInput: {
+    flex: 1,
+    color: '#fff',
+    fontSize: 15,
+    fontFamily: 'texgyR',
+    height: '100%',
+  },
+  eyeBtn: {
+    padding: 6,
+  },
+  errorContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(239, 68, 68, 0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(239, 68, 68, 0.3)',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    marginBottom: 16,
+  },
+  errorText: {
+    color: '#ef4444',
+    fontSize: 13,
+    fontFamily: 'GlacialR',
+    flex: 1,
+  },
+  modalDeleteConfirmBtn: {
+    backgroundColor: '#dc2626',
+    paddingVertical: 12,
+    paddingHorizontal: 18,
+    borderRadius: 12,
+    minWidth: 160,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalDeleteConfirmText: {
+    color: '#fff',
+    fontFamily: 'texgyB',
+    fontSize: 14,
+  },
+  btnDisabled: {
+    opacity: 0.5,
   },
   versionText: {
     textAlign: 'center',

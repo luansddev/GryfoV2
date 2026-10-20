@@ -222,7 +222,7 @@ export default function Notificacoes() {
         <Animated.View entering={FadeInUp.duration(300)} style={styles.empty}>
           <View style={styles.emptyIconOuter}>
             <View style={styles.emptyIconInner}>
-              <FontAwesome6 name="bolt" size={26} color="#2563eb" />
+              <FontAwesome6 name="bell" size={28} color="#2563eb" />
             </View>
           </View>
           <Text style={styles.emptyTitle}>

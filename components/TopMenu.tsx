@@ -1,39 +1,36 @@
-import React, { useEffect, useState } from 'react';
-import { View, TextInput, StyleSheet, Text, Platform, Keyboard, TouchableOpacity, LayoutAnimation, Alert, FlatList } from 'react-native';
+import React, { useEffect, useState, useMemo } from 'react';
+import { View, TextInput, StyleSheet, Text, Platform, Keyboard, TouchableOpacity, LayoutAnimation, Alert, FlatList, ActivityIndicator } from 'react-native';
 import { FontAwesome } from '@expo/vector-icons';
 import FontAwesome6 from '@expo/vector-icons/FontAwesome6';
 import * as Location from 'expo-location';
 import { useSearchLocation } from '../src/context/SearchLocationContext';
 import { normalizarCidade } from '../src/context/Normalizer';
+import { useCityDirectory, CityOption } from '../src/hooks/useCityDirectory';
+import { resolveSspKey, prettifySspKey } from '../src/services/analytics/CityDirectory';
 
 export default function TopMenu({ renderTabBar }: { renderTabBar?: () => React.ReactNode }) {
   const [locationName, setLocationName] = useState('Carregando...');
   const [searchText, setSearchText] = useState('');
   const { location, setLocation, searchMode, setSearchMode, userCity, setUserCity, searchedCity, setSearchedCity } = useSearchLocation();
-  const [validCities, setValidCities] = useState<string[]>([]);
+  const { cities, ready, search } = useCityDirectory();
   const [showDropdown, setShowDropdown] = useState(false);
 
   useEffect(() => {
     loadUserLocation();
-    fetchValidCities();
   }, []);
+
+  const nameFor = (key: string | null) => {
+    if (!key) return null;
+    const resolved = resolveSspKey(key, cities.map(c => c.key));
+    return cities.find(c => c.key === resolved)?.displayName ?? prettifySspKey(key);
+  };
 
   useEffect(() => {
     if (searchedCity) {
-      setSearchText(formatCity(searchedCity));
+      const name = nameFor(searchedCity);
+      if (name) setSearchText(name);
     }
-  }, [searchedCity]);
-
-  const fetchValidCities = async () => {
-    try {
-      const res = await fetch('https://gryfocorp.web.app/ssp-2-2026.json');
-      const json = await res.json();
-      const cities = Object.keys(json).filter(key => key !== 'nome_da_cidade' && key !== 'timestamp');
-      setValidCities(cities);
-    } catch (error) {
-      console.error('Erro ao buscar lista de cidades:', error);
-    }
-  };
+  }, [searchedCity, cities]);
 
   const loadUserLocation = async () => {
     const { status } = await Location.requestForegroundPermissionsAsync();
@@ -64,28 +61,22 @@ export default function TopMenu({ renderTabBar }: { renderTabBar?: () => React.R
     });
   };
 
-  const formatCity = (city: string) => {
-    return city.replace(/\bS\./, 'SÃO ').toLowerCase().split(' ').map((w: string) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
-  };
+  const results = useMemo(() => {
+    const q = searchText.trim();
+    if (!q) return [];
+    return search(q, 5);
+  }, [searchText, search]);
 
-  const handleSearch = async (cityToSearch?: string) => {
-    const textToSearch = cityToSearch || searchText.trim();
-    if (!textToSearch) return;
-
-    const normalizedCity = cityToSearch ? cityToSearch : normalizarCidade(textToSearch);
-    if (validCities.length > 0 && !validCities.includes(normalizedCity)) {
-      Alert.alert('Cidade não encontrada', 'Por favor, pesquise apenas por cidades do estado de São Paulo.');
-      return;
-    }
+  const handleSelectCity = async (city: CityOption) => {
+    setSearchText(city.displayName);
+    setShowDropdown(false);
+    Keyboard.dismiss();
+    setSearchedCity(city.key);
+    setSearchMode(true);
 
     try {
-      const formatted = formatCity(normalizedCity);
-      setSearchText(formatted);
-      setShowDropdown(false);
-      Keyboard.dismiss();
-
       const geoRes = await fetch(
-        `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(formatted)}, São Paulo, Brasil&format=json&limit=1`,
+        `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(city.displayName)}, São Paulo, Brasil&format=json&limit=1`,
         { headers: { 'User-Agent': 'Gardio/1.0' } }
       );
       const geoJson = await geoRes.json();
@@ -95,7 +86,6 @@ export default function TopMenu({ renderTabBar }: { renderTabBar?: () => React.R
           latitude: parseFloat(geoJson[0].lat),
           longitude: parseFloat(geoJson[0].lon),
         });
-        setSearchedCity(normalizedCity);
       } else {
         Alert.alert('Erro', 'Não foi possível encontrar as coordenadas para esta cidade.');
       }
@@ -104,10 +94,23 @@ export default function TopMenu({ renderTabBar }: { renderTabBar?: () => React.R
     }
   };
 
-  const goToUserLocation = async () => {
-    await loadUserLocation();
-    setSearchText('');
-    Keyboard.dismiss(); // Opcional: fecha o teclado
+  const handleSearch = async () => {
+    const textToSearch = searchText.trim();
+    if (!textToSearch) return;
+
+    if (results.length > 0) {
+      await handleSelectCity(results[0]);
+      return;
+    }
+
+    const resolved = resolveSspKey(textToSearch, cities.map(c => c.key));
+    const matchedCity = cities.find(c => c.key === resolved);
+    if (matchedCity) {
+      await handleSelectCity(matchedCity);
+      return;
+    }
+
+    Alert.alert('Cidade não encontrada', 'Por favor, pesquise apenas por cidades do estado de São Paulo.');
   };
 
   return (
@@ -122,6 +125,7 @@ export default function TopMenu({ renderTabBar }: { renderTabBar?: () => React.R
                 setSearchMode(false);
                 setSearchedCity(null);
                 setSearchText('');
+                setShowDropdown(false);
               }}
               activeOpacity={0.8}
             >
@@ -133,7 +137,7 @@ export default function TopMenu({ renderTabBar }: { renderTabBar?: () => React.R
                 LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
                 setSearchMode(true);
                 if (searchedCity && !searchText.trim()) {
-                  setSearchText(formatCity(searchedCity));
+                  setSearchText(nameFor(searchedCity) || searchedCity);
                 }
               }}
               activeOpacity={0.8}
@@ -156,12 +160,22 @@ export default function TopMenu({ renderTabBar }: { renderTabBar?: () => React.R
                     setSearchText(text);
                     setShowDropdown(true);
                   }}
-                  onSubmitEditing={() => handleSearch()}
+                  onFocus={() => setShowDropdown(true)}
+                  onSubmitEditing={handleSearch}
                   returnKeyType="search"
                   autoFocus={false}
                 />
+                {!ready && searchText.length > 0 && (
+                  <ActivityIndicator size="small" color="#999" style={{ marginRight: 6 }} />
+                )}
                 {searchText.length > 0 && (
-                  <TouchableOpacity onPress={() => setSearchText('')} style={styles.clearButton}>
+                  <TouchableOpacity 
+                    onPress={() => {
+                      setSearchText('');
+                      setShowDropdown(false);
+                    }} 
+                    style={styles.clearButton}
+                  >
                     <FontAwesome name="times-circle" size={16} color="#999" />
                   </TouchableOpacity>
                 )}
@@ -174,16 +188,16 @@ export default function TopMenu({ renderTabBar }: { renderTabBar?: () => React.R
       {searchMode && showDropdown && searchText.trim().length > 0 && (
         <View style={styles.dropdownContainer}>
           <FlatList
-            data={validCities.filter(c => c.includes(normalizarCidade(searchText.trim()))).slice(0, 5)}
-            keyExtractor={(item) => item}
+            data={results}
+            keyExtractor={(item) => item.key}
             keyboardShouldPersistTaps="handled"
             renderItem={({ item }) => (
               <TouchableOpacity 
                 style={styles.dropdownItem}
-                onPress={() => handleSearch(item)}
+                onPress={() => handleSelectCity(item)}
               >
                 <FontAwesome name="map-marker" size={14} color="#666" style={{ marginRight: 8 }} />
-                <Text style={styles.dropdownItemText}>{formatCity(item)}</Text>
+                <Text style={styles.dropdownItemText}>{item.displayName}</Text>
               </TouchableOpacity>
             )}
           />
@@ -215,7 +229,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: '#e4e4e4ff',
     borderRadius: 25,
-    paddingHorizontal: 6,
+    paddingLeft: 9,
+    paddingRight: 6,
     height: 50,
   },
   switchContainer: {

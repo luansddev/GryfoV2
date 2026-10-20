@@ -21,6 +21,7 @@ import Animated, { useSharedValue, useAnimatedStyle, withTiming } from 'react-na
 import * as Location from 'expo-location';
 import { useSearchLocation } from '../../context/SearchLocationContext';
 import { normalizarCidade } from '../../context/Normalizer';
+import { prettifySspKey } from '../../services/analytics/CityDirectory';
 
 import { LinearGradient } from 'expo-linear-gradient';
 import Svg, { Path } from 'react-native-svg';
@@ -350,7 +351,7 @@ export default function Dados() {
       });
 
       // Formatar nome para exibição (Primeira Letra Maiúscula)
-      const formattedName = searchedCity.toLowerCase().split(' ').map((w: string) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+      const formattedName = prettifySspKey(searchedCity);
       setCityName(formattedName);
     } else if (!searchMode && userCity) {
       // Voltou ao modo normal (desativou a busca)
@@ -365,7 +366,7 @@ export default function Dados() {
           longitudeDelta: 0.08,
         });
         
-        const formattedName = defaultCity.toLowerCase().split(' ').map((w: string) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+        const formattedName = prettifySspKey(defaultCity);
         setCityName(formattedName);
       }
     }

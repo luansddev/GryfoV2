@@ -1,13 +1,11 @@
-import { useState } from 'react';
-import { Dimensions, StyleSheet, Text, View, TouchableOpacity, LayoutAnimation, Platform } from 'react-native';
+import { useState, useCallback, useEffect } from 'react';
+import { Dimensions, StyleSheet, Text, View, TouchableOpacity, LayoutAnimation, Platform, ScrollView, ActivityIndicator, BackHandler } from 'react-native';
 import { TabView, SceneMap } from 'react-native-tab-view';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFonts } from 'expo-font';
 import FontAwesome6 from '@expo/vector-icons/FontAwesome6';
 import Animated, { LinearTransition, FadeIn, FadeOut } from 'react-native-reanimated';
-import { useRouter } from 'expo-router';
-import { useEffect } from 'react';
-import { ScrollView, ActivityIndicator } from 'react-native';
+import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { db, auth } from '../config/firebaseConfig';
 import { onAuthStateChanged } from 'firebase/auth';
 import { collection, query, where, orderBy, onSnapshot, doc, updateDoc } from 'firebase/firestore';
@@ -358,6 +356,29 @@ const Salvos = () => {
 
 export default function Biblioteca() {
   const router = useRouter();
+  const params = useLocalSearchParams<{ from?: string }>();
+
+  const handleGoBack = useCallback(() => {
+    if (params.from === 'conta') {
+      router.replace('/conta');
+    } else if (params.from === 'relatos') {
+      router.replace({ pathname: '/home', params: { switchTab: 'relatos' } });
+    } else {
+      router.replace('/home');
+    }
+  }, [params.from, router]);
+
+  useFocusEffect(
+    useCallback(() => {
+      const onBackPress = () => {
+        handleGoBack();
+        return true;
+      };
+
+      const subscription = BackHandler.addEventListener('hardwareBackPress', onBackPress);
+      return () => subscription.remove();
+    }, [handleGoBack])
+  );
 
   const [fontsLoaded] = useFonts({
     texgyR: require('../../assets/fontes/texgyreadventor-regular.otf'),
@@ -401,7 +422,7 @@ export default function Biblioteca() {
         <View style={styles.topSection}>
           <Spacer />
           <View style={styles.customTopMenu}>
-            <TouchableOpacity onPress={() => router.back()} style={styles.backButton} activeOpacity={0.7}>
+            <TouchableOpacity onPress={handleGoBack} style={styles.backButton} activeOpacity={0.7}>
               <FontAwesome6 name="arrow-left" size={18} color="#333" />
             </TouchableOpacity>
 

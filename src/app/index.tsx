@@ -1,20 +1,29 @@
 //Tela de início
 import { router, useFocusEffect } from "expo-router";
 import { Dimensions, Image, ImageBackground, StyleSheet, Text, TouchableOpacity, View, Animated } from "react-native";
-import { useCallback, useRef } from "react";
+import { useCallback, useRef, useState, useEffect } from "react";
 import { LinearGradient } from "expo-linear-gradient";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { FontAwesome6 } from "@expo/vector-icons";
 import { auth } from "../config/firebaseConfig";
+import { onAuthStateChanged } from "firebase/auth";
 
 const { width, height } = Dimensions.get("window");
 const AnimatedImageBackground = Animated.createAnimatedComponent(ImageBackground);
 
 export default function Index() {
     const insets = useSafeAreaInsets();
+    const [currentUser, setCurrentUser] = useState(auth.currentUser);
+
+    useEffect(() => {
+        const unsubscribe = onAuthStateChanged(auth, (user) => {
+            setCurrentUser(user);
+        });
+        return unsubscribe;
+    }, []);
 
     // Se o usuário já estiver autenticado, não renderiza botões nem dispara animações da tela inicial
-    if (auth.currentUser) {
+    if (currentUser) {
         return <View style={styles.container} />;
     }
 

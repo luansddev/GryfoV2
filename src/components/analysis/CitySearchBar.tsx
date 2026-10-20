@@ -181,7 +181,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: '#e4e4e4ff',
     borderRadius: 25,
-    paddingHorizontal: 6,
+    paddingLeft: 9,
+    paddingRight: 6,
     height: 50,
   },
   switchContainer: {

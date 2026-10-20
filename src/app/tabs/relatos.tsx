@@ -740,7 +740,7 @@ export default function Relatos() {
                 onRefresh={onRefresh}
                 tintColor="#3b82f6"
                 colors={['#3b82f6']} // Para Android
-                progressViewOffset={120} // Adicionado para descer a bolinha
+                progressViewOffset={Math.max(190, (insets.top || 0) + 145)} // Desce a bolinha para não ficar oculta pela navbar superior
               />
             }
           >
@@ -912,7 +912,7 @@ export default function Relatos() {
                 style={styles.actionBtn}
                 onPress={() => {
                   setShowNoRelatosTooltip(false);
-                  router.push('/biblioteca');
+                  router.push({ pathname: '/biblioteca', params: { from: 'relatos' } });
                 }}
                 activeOpacity={0.8}
               >
