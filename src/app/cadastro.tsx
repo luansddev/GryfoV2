@@ -2,7 +2,6 @@ import { useRouter, useFocusEffect } from "expo-router";
 import React, { useState, useCallback, useRef } from 'react';
 import {
     ActivityIndicator,
-    Alert,
     Dimensions,
     Image,
     ImageBackground,
@@ -20,7 +19,7 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { FontAwesome6 } from '@expo/vector-icons';
-import { registerUser } from '../services/auth/registerUser';
+import { registerUser, checkEmailExists } from '../services/auth/registerUser';
 
 const { width, height } = Dimensions.get('window');
 const AnimatedImageBackground = Animated.createAnimatedComponent(ImageBackground);
@@ -37,6 +36,8 @@ export default function Cadastro() {
     const [confSenha, setConfSenha] = useState('');
     const [secureEntry, setSecureEntry] = useState(true);
     const [secureEntryConf, setSecureEntryConf] = useState(true);
+    const [emailError, setEmailError] = useState('');
+    const [formError, setFormError] = useState('');
 
     const cpfInputRef = useRef<TextInput>(null);
     const confSenhaInputRef = useRef<TextInput>(null);
@@ -134,32 +135,56 @@ export default function Cadastro() {
     };
 
     const handleAvancarSegundaEtapa = async () => {
+        if (!isEmailValid || !isCpfValid || isLoading) return;
+
         setIsLoading(true);
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        changeStep("senha", "forward");
-        setIsLoading(false);
+        setEmailError('');
+
+        try {
+            const exists = await checkEmailExists(email);
+            if (exists) {
+                setEmailError('Este e-mail já está cadastrado.');
+                setIsLoading(false);
+                return;
+            }
+
+            changeStep("senha", "forward");
+        } catch (error) {
+            console.error("Erro ao validar e-mail:", error);
+            changeStep("senha", "forward");
+        } finally {
+            setIsLoading(false);
+        }
     };
 
     const handleEtapaAnteriorCpfEmail = () => changeStep("nome", "backward");
-    const handleEtapaAnteriorSenha = () => changeStep("cpfemail", "backward");
+    const handleEtapaAnteriorSenha = () => {
+        setFormError('');
+        changeStep("cpfemail", "backward");
+    };
 
     const handleConcluir = async () => {
         setIsLoading(true);
+        setFormError('');
 
         const result = await registerUser({ name, sobrenome: '', email, senha, cpf });
 
         setIsLoading(false);
 
         if (result.success) {
-            Alert.alert('Sucesso', 'Cadastro realizado com sucesso!');
-            router.replace('/home'); //Não sei qual é o erro dessa linha, mas ta funcionando, segue o jogo kkk.
+            router.replace('/home');
         } else {
-            Alert.alert('Erro', result.error || 'Não foi possível cadastrar o usuário.');
+            if (result.code === 'auth/email-already-in-use' || result.error?.toLowerCase().includes('e-mail')) {
+                setEmailError(result.error || 'Este e-mail já está cadastrado.');
+                changeStep("cpfemail", "backward");
+            } else {
+                setFormError(result.error || 'Não foi possível cadastrar o usuário.');
+            }
         }
     };
 
     const btDesativoPrimeiraEtapa = name.trim() === '';
-    const btDesativoSegundaEtapa = !isEmailValid || !isCpfValid || isLoading;
+    const btDesativoSegundaEtapa = !isEmailValid || !isCpfValid || isLoading || !!emailError;
     const btDesativoTerceiraEtapa = !isPasswordValid || isLoading;
 
     // Step indicator
@@ -187,7 +212,7 @@ export default function Cadastro() {
                             styles.scrollContent,
                             { paddingTop: insets.top + 4, paddingBottom: insets.bottom + 40 },
                         ]}
-                        keyboardShouldPersistTaps="handled"
+                        keyboardShouldPersistTaps="always" keyboardDismissMode="none"
                         showsVerticalScrollIndicator={false}
                         automaticallyAdjustKeyboardInsets={true}
                     >
@@ -257,11 +282,17 @@ export default function Cadastro() {
                                             <FontAwesome6 name="user" size={15} color="rgba(255,255,255,0.5)" style={styles.inputIcon} />
                                             <TextInput
                                                 placeholder="Nome"
+                                                blurOnSubmit={false}
                                                 placeholderTextColor="rgba(255,255,255,0.4)"
                                                 onChangeText={setName}
                                                 style={styles.input}
                                                 autoCapitalize="words"
                                                 autoCorrect={false}
+                                                autoComplete="name"
+                                                textContentType="name"
+                                                cursorColor="#fff"
+                                                selectionColor="rgba(255,255,255,0.3)"
+                                                underlineColorAndroid="transparent"
                                                 value={name}
                                                 returnKeyType="next"
                                                 onSubmitEditing={() => {
@@ -302,26 +333,44 @@ export default function Cadastro() {
 
                                         <View collapsable={false} style={[
                                             styles.inputWrapper,
-                                            !isEmailValid && email.length > 0 && styles.inputError,
+                                            ((!isEmailValid && email.length > 0) || !!emailError) && styles.inputError,
                                         ]}>
-                                            {isEmailValid ? (
+                                            {emailError ? (
+                                                <FontAwesome6 name="circle-exclamation" size={15} color="#f87171" style={styles.inputIcon} />
+                                            ) : isEmailValid ? (
                                                 <FontAwesome6 name="circle-check" size={15} color="#4ade80" style={styles.inputIcon} />
                                             ) : (
                                                 <FontAwesome6 name="envelope" size={15} color="rgba(255,255,255,0.5)" style={styles.inputIcon} />
                                             )}
                                             <TextInput
                                                 placeholder="E-mail"
+                                                blurOnSubmit={false}
                                                 placeholderTextColor="rgba(255,255,255,0.4)"
                                                 style={styles.input}
                                                 value={email}
-                                                onChangeText={setEmail}
+                                                onChangeText={(text) => {
+                                                    setEmail(text);
+                                                    if (emailError) setEmailError('');
+                                                }}
                                                 keyboardType="email-address"
                                                 autoCapitalize="none"
                                                 autoCorrect={false}
+                                                autoComplete="email"
+                                                textContentType="emailAddress"
+                                                cursorColor="#fff"
+                                                selectionColor="rgba(255,255,255,0.3)"
+                                                underlineColorAndroid="transparent"
                                                 returnKeyType="next"
                                                 onSubmitEditing={() => cpfInputRef.current?.focus()}
                                             />
                                         </View>
+
+                                        {emailError !== '' && (
+                                            <View style={styles.fieldErrorContainer}>
+                                                <FontAwesome6 name="circle-exclamation" size={13} color="#f87171" style={{ marginRight: 6 }} />
+                                                <Text style={styles.fieldErrorText}>{emailError}</Text>
+                                            </View>
+                                        )}
 
                                         <View collapsable={false} style={[
                                             styles.inputWrapper,
@@ -335,6 +384,7 @@ export default function Cadastro() {
                                             <TextInput
                                                 ref={cpfInputRef}
                                                 placeholder="CPF"
+                                                blurOnSubmit={false}
                                                 placeholderTextColor="rgba(255,255,255,0.4)"
                                                 style={styles.input}
                                                 value={cpf}
@@ -342,6 +392,9 @@ export default function Cadastro() {
                                                 keyboardType="numeric"
                                                 autoCorrect={false}
                                                 maxLength={14}
+                                                cursorColor="#fff"
+                                                selectionColor="rgba(255,255,255,0.3)"
+                                                underlineColorAndroid="transparent"
                                                 returnKeyType="done"
                                                 onSubmitEditing={() => {
                                                     if (!btDesativoSegundaEtapa && !isLoading) {
@@ -401,12 +454,21 @@ export default function Cadastro() {
                                             <FontAwesome6 name="lock" size={15} color="rgba(255,255,255,0.5)" style={styles.inputIcon} />
                                             <TextInput
                                                 placeholder="Senha"
+                                                blurOnSubmit={false}
                                                 placeholderTextColor="rgba(255,255,255,0.4)"
-                                                onChangeText={setSenha}
+                                                onChangeText={(text) => {
+                                                    setSenha(text);
+                                                    if (formError) setFormError('');
+                                                }}
                                                 value={senha}
                                                 secureTextEntry={secureEntry}
                                                 autoCapitalize="none"
                                                 autoCorrect={false}
+                                                autoComplete="new-password"
+                                                textContentType="newPassword"
+                                                cursorColor="#fff"
+                                                selectionColor="rgba(255,255,255,0.3)"
+                                                underlineColorAndroid="transparent"
                                                 style={styles.input}
                                                 returnKeyType="next"
                                                 onSubmitEditing={() => confSenhaInputRef.current?.focus()}
@@ -424,12 +486,21 @@ export default function Cadastro() {
                                             <TextInput
                                                 ref={confSenhaInputRef}
                                                 placeholder="Repita a senha"
+                                                blurOnSubmit={false}
                                                 placeholderTextColor="rgba(255,255,255,0.4)"
-                                                onChangeText={setConfSenha}
+                                                onChangeText={(text) => {
+                                                    setConfSenha(text);
+                                                    if (formError) setFormError('');
+                                                }}
                                                 value={confSenha}
                                                 secureTextEntry={secureEntryConf}
                                                 autoCapitalize="none"
                                                 autoCorrect={false}
+                                                autoComplete="new-password"
+                                                textContentType="newPassword"
+                                                cursorColor="#fff"
+                                                selectionColor="rgba(255,255,255,0.3)"
+                                                underlineColorAndroid="transparent"
                                                 style={styles.input}
                                                 returnKeyType="done"
                                                 onSubmitEditing={() => {
@@ -442,6 +513,13 @@ export default function Cadastro() {
                                                 <FontAwesome6 name={secureEntryConf ? "eye" : "eye-slash"} size={15} color="rgba(255,255,255,0.5)" />
                                             </TouchableOpacity>
                                         </View>
+
+                                        {formError !== '' && (
+                                            <View style={styles.errorContainer}>
+                                                <FontAwesome6 name="circle-exclamation" size={14} color="#f87171" style={{ marginRight: 8 }} />
+                                                <Text style={styles.errorText}>{formError}</Text>
+                                            </View>
+                                        )}
 
                                         <View style={styles.dualButtonRow}>
                                             <TouchableOpacity
@@ -613,6 +691,7 @@ const styles = StyleSheet.create({
         fontSize: 16,
         fontFamily: 'GlacialR',
         height: '100%',
+        backgroundColor: 'transparent',
     },
     eyeBtn: {
         padding: 6,
@@ -690,5 +769,33 @@ const styles = StyleSheet.create({
     switchLinkBold: {
         color: '#fff',
         fontFamily: 'texgyB',
+    },
+    fieldErrorContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginTop: -8,
+        marginBottom: 14,
+        paddingHorizontal: 4,
+    },
+    fieldErrorText: {
+        color: '#f87171',
+        fontSize: 13,
+        fontFamily: 'GlacialR',
+        flex: 1,
+    },
+    errorContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: 'rgba(248,113,113,0.12)',
+        borderRadius: 10,
+        paddingHorizontal: 14,
+        paddingVertical: 10,
+        marginBottom: 16,
+    },
+    errorText: {
+        color: '#f87171',
+        fontSize: 14,
+        fontFamily: 'GlacialR',
+        flex: 1,
     },
 });

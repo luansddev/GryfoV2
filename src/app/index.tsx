@@ -22,11 +22,7 @@ export default function Index() {
         return unsubscribe;
     }, []);
 
-    // Se o usuário já estiver autenticado, não renderiza botões nem dispara animações da tela inicial
-    if (currentUser) {
-        return <View style={styles.container} />;
-    }
-
+    // Todos os hooks precisam ser chamados antes de qualquer return condicional
     const bgOpacity = useRef(new Animated.Value(0)).current;
     const logoOpacity = useRef(new Animated.Value(0)).current;
     const logoTranslateY = useRef(new Animated.Value(-30)).current;
@@ -35,6 +31,9 @@ export default function Index() {
 
     useFocusEffect(
         useCallback(() => {
+            // Usuário autenticado: não dispara as animações da tela inicial
+            if (auth.currentUser) return;
+
             // Reset values so the animation replays
             bgOpacity.setValue(0);
             logoOpacity.setValue(0);
@@ -61,6 +60,12 @@ export default function Index() {
     }
     function navegarLog() {
         router.navigate("/login");
+    }
+
+    // Se o usuário já estiver autenticado, não renderiza botões (o _layout redireciona para /home).
+    // Este return fica DEPOIS de todos os hooks para manter a ordem de hooks estável.
+    if (currentUser) {
+        return <View style={styles.container} />;
     }
 
     return (
@@ -104,7 +109,7 @@ export default function Index() {
                                 activeOpacity={0.8}
                             >
                                 <FontAwesome6 name="user-plus" size={16} color="#fff" />
-                                <Text style={styles.btnPrimaryText} numberOfLines={1} adjustsFontSizeToFit>Crie uma conta</Text>
+                                <Text style={styles.btnPrimaryText} numberOfLines={1}>Crie uma conta</Text>
                             </TouchableOpacity>
 
                             <View style={styles.dividerRow}>

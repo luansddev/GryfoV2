@@ -76,7 +76,8 @@ export default function Login() {
         } catch (error: any) {
             if (
                 error.code === 'auth/user-not-found' ||
-                error.code === 'auth/wrong-password'
+                error.code === 'auth/wrong-password' ||
+                error.code === 'auth/invalid-credential'
             ) {
                 setErrorMessage('Email ou senha incorretos.');
             } else {
@@ -111,7 +112,7 @@ export default function Login() {
                             styles.scrollContent,
                             { paddingTop: insets.top + 4, paddingBottom: insets.bottom + 40 },
                         ]}
-                        keyboardShouldPersistTaps="handled"
+                        keyboardShouldPersistTaps="handled" keyboardDismissMode="none"
                         showsVerticalScrollIndicator={false}
                         automaticallyAdjustKeyboardInsets={true}
                     >
@@ -145,8 +146,17 @@ export default function Login() {
                                     keyboardType="email-address"
                                     autoCapitalize="none"
                                     autoCorrect={false}
+                                    autoComplete="email"
+                                    textContentType="emailAddress"
+                                    cursorColor="#fff"
+                                    selectionColor="rgba(255,255,255,0.3)"
+                                    underlineColorAndroid="transparent"
+                                    blurOnSubmit={false}
                                     value={email}
-                                    onChangeText={setEmail}
+                                    onChangeText={(text) => {
+                                        setEmail(text);
+                                        if (errorMessage) setErrorMessage('');
+                                    }}
                                     returnKeyType="next"
                                     onSubmitEditing={() => senhaRef.current?.focus()}
                                 />
@@ -163,8 +173,17 @@ export default function Login() {
                                     style={styles.input}
                                     autoCapitalize="none"
                                     autoCorrect={false}
+                                    autoComplete="password"
+                                    textContentType="password"
+                                    cursorColor="#fff"
+                                    selectionColor="rgba(255,255,255,0.3)"
+                                    underlineColorAndroid="transparent"
                                     value={senha}
-                                    onChangeText={setSenha}
+                                    blurOnSubmit={false}
+                                    onChangeText={(text) => {
+                                        setSenha(text);
+                                        if (errorMessage) setErrorMessage('');
+                                    }}
                                     returnKeyType="done"
                                     onSubmitEditing={() => {
                                         if (!isButtonDisabled) {
@@ -279,6 +298,7 @@ const styles = StyleSheet.create({
         fontSize: 16,
         fontFamily: 'GlacialR',
         height: '100%',
+        backgroundColor: 'transparent',
     },
     eyeBtn: {
         padding: 6,

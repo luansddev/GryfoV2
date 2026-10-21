@@ -18,10 +18,6 @@
     "android": {
       "package": "br.gardio",
       "softwareKeyboardLayoutMode": "resize",
-      "notification": {
-        "icon": "./assets/images/notification-icon.png",
-        "color": "#1d4ed8"
-      },
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/gardio-icon.png",
         "backgroundColor": "#000000"
@@ -52,7 +48,8 @@
           "icon": "./assets/images/notification-icon.png",
           "color": "#1d4ed8"
         }
-      ]
+      ],
+      "./plugins/withAutofillHighlight.js"
     ],
     "experiments": {
       "typedRoutes": true

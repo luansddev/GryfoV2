@@ -1,6 +1,6 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { collection, onSnapshot, query, Timestamp, where } from 'firebase/firestore';
+import { collection, deleteDoc, doc, onSnapshot, query, setDoc, Timestamp, where, writeBatch } from 'firebase/firestore';
 import { onAuthStateChanged } from 'firebase/auth';
 import { auth, db } from '../config/firebaseConfig';
 import { getDeviceId } from '../utils/device';
@@ -148,16 +148,53 @@ export function VigiasProvider({ children }: { children: React.ReactNode }) {
   const saveVigias = useCallback(async (next: Vigia[]) => {
     if (!ownerKey) return;
     const tagged = next.map(v => ({ ...v, userId: v.userId || ownerKey }));
+    const previous = vigiasRef.current;
     vigiasRef.current = tagged;
     setVigias(tagged);
+
+    // 1. Persistência local imediata (cache rápido para offline e boot)
     try {
       await AsyncStorage.setItem(`@gardio_vigias_${ownerKey}`, JSON.stringify(tagged));
     } catch (e) {
-      console.warn('Erro ao salvar vigias:', e);
+      console.warn('Erro ao salvar vigias localmente:', e);
+    }
+
+    // 2. Sincronização na nuvem (Firestore: users/{ownerKey}/vigias/{vigiaId})
+    try {
+      const nextIds = new Set(tagged.map(v => v.id));
+      const removed = previous.filter(v => !nextIds.has(v.id));
+
+      const batch = writeBatch(db);
+
+      // Salva / atualiza cada vigia presente na nova lista
+      tagged.forEach(v => {
+        const vRef = doc(db, 'users', ownerKey, 'vigias', v.id);
+        batch.set(vRef, {
+          id: v.id,
+          name: v.name,
+          latitude: v.latitude,
+          longitude: v.longitude,
+          radius: v.radius,
+          createdAt: v.createdAt,
+          address: v.address || '',
+          userId: ownerKey,
+          updatedAt: Date.now(),
+        }, { merge: true });
+      });
+
+      // Remove do Firestore os vigias que foram deletados
+      removed.forEach(v => {
+        const vRef = doc(db, 'users', ownerKey, 'vigias', v.id);
+        batch.delete(vRef);
+      });
+
+      await batch.commit();
+    } catch (e) {
+      console.warn('Erro ao sincronizar vigias no Firestore:', e);
     }
   }, [ownerKey]);
 
-  /* ---------- Carregamento inicial ---------- */
+  /* ---------- Carregamento inicial e Sincronização em Tempo Real ---------- */
 
   useEffect(() => {
     if (!ownerKey) {
@@ -172,10 +209,12 @@ export function VigiasProvider({ children }: { children: React.ReactNode }) {
     }
 
     let mounted = true;
+    let unsubscribeVigias: (() => void) | undefined;
     setVigiasLoaded(false);
     setNotificationsLoaded(false);
 
     (async () => {
+      // 1. Carrega do cache local primeiro para resposta visual instantânea
       try {
         const [storedVigias, storedNotifications] = await Promise.all([
           AsyncStorage.getItem(`@gardio_vigias_${ownerKey}`),
@@ -206,17 +245,90 @@ export function VigiasProvider({ children }: { children: React.ReactNode }) {
           setNotifications([]);
         }
       } catch (e) {
-        console.warn('Erro ao carregar vigias/notificações:', e);
+        console.warn('Erro ao carregar cache local de vigias/notificações:', e);
       } finally {
         if (mounted) {
           setVigiasLoaded(true);
           setNotificationsLoaded(true);
         }
       }
+
+      // 2. Conectar listener em tempo real com a coleção `users/{ownerKey}/vigias` no Firestore
+      try {
+        const vigiasCol = collection(db, 'users', ownerKey, 'vigias');
+        unsubscribeVigias = onSnapshot(vigiasCol, async (snapshot) => {
+          if (!mounted) return;
+
+          // Se o Firestore está vazio, mas temos vigias salvos no cache local, migra para o Firestore automaticamente
+          if (snapshot.empty && vigiasRef.current.length > 0) {
+            try {
+              const batch = writeBatch(db);
+              vigiasRef.current.forEach(v => {
+                const ref = doc(db, 'users', ownerKey, 'vigias', v.id);
+                batch.set(ref, {
+                  id: v.id,
+                  name: v.name,
+                  latitude: v.latitude,
+                  longitude: v.longitude,
+                  radius: v.radius,
+                  createdAt: v.createdAt,
+                  address: v.address || '',
+                  userId: ownerKey,
+                  updatedAt: Date.now(),
+                });
+              });
+              await batch.commit();
+            } catch (err) {
+              console.warn('Erro ao migrar vigias locais para o Firestore:', err);
+            }
+            return;
+          }
+
+          if (!snapshot.empty) {
+            const remoteVigias: Vigia[] = snapshot.docs.map(docSnap => {
+              const data = docSnap.data();
+              return {
+                id: data.id || docSnap.id,
+                name: data.name || '',
+                latitude: Number(data.latitude),
+                longitude: Number(data.longitude),
+                radius: Number(data.radius),
+                createdAt: Number(data.createdAt) || Date.now(),
+                address: data.address || undefined,
+                userId: data.userId || ownerKey,
+              };
+            });
+
+            remoteVigias.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+
+            vigiasRef.current = remoteVigias;
+            setVigias(remoteVigias);
+            setVigiasLoaded(true);
+
+            // Atualiza cache local com a versão mais recente da nuvem
+            AsyncStorage.setItem(`@gardio_vigias_${ownerKey}`, JSON.stringify(remoteVigias)).catch(() => {});
+          } else {
+            // Firestore realmente vazio e sem vigias locais pendentes
+            vigiasRef.current = [];
+            setVigias([]);
+            setVigiasLoaded(true);
+            AsyncStorage.removeItem(`@gardio_vigias_${ownerKey}`).catch(() => {});
+          }
+        }, (err) => {
+          console.warn('Erro ao escutar vigias do Firestore:', err);
+          if (mounted) setVigiasLoaded(true);
+        });
+      } catch (err) {
+        console.warn('Erro ao configurar listener do Firestore para vigias:', err);
+        if (mounted) setVigiasLoaded(true);
+      }
     })();
 
     return () => {
       mounted = false;
+      if (unsubscribeVigias) {
+        unsubscribeVigias();
+      }
     };
   }, [ownerKey]);
 

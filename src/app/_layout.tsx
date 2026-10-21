@@ -129,9 +129,9 @@ export default function RootLayout() {
             },
           }}
         >
-          <Tabs.Screen name="index" />
-          <Tabs.Screen name="login" />
-          <Tabs.Screen name="cadastro" />
+          <Tabs.Screen name="index" options={{ tabBarStyle: { display: 'none' } }} />
+          <Tabs.Screen name="login" options={{ tabBarStyle: { display: 'none' } }} />
+          <Tabs.Screen name="cadastro" options={{ tabBarStyle: { display: 'none' } }} />
           <Tabs.Screen name="home" />
           <Tabs.Screen name="analise" />
           <Tabs.Screen name="notificacoes" />
@@ -165,6 +165,7 @@ function BottomMenuWrapper(props: any) {
   if (isHiddenRoute) {
     return null;
   }
+
   return <BottomMenu {...props} />;
 }
 

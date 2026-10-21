@@ -21,7 +21,7 @@ import { auth, db } from '../config/firebaseConfig';
 import { signOut, EmailAuthProvider, reauthenticateWithCredential, deleteUser } from 'firebase/auth';
 import { FontAwesome6 } from '@expo/vector-icons';
 import { useVigias } from '../context/VigiasContext';
-import { collection, query, where, getCountFromServer, doc, getDoc, updateDoc, setDoc, deleteDoc } from 'firebase/firestore';
+import { collection, query, where, getCountFromServer, doc, getDoc, updateDoc, setDoc, deleteDoc, getDocs } from 'firebase/firestore';
 import { getDeviceId } from '../utils/device';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -95,16 +95,22 @@ export default function Conta() {
       const credential = EmailAuthProvider.credential(currentUser.email, deletePassword);
       await reauthenticateWithCredential(currentUser, credential);
 
-      // 2. Remove documento do usuário no Firestore
+      // 2. Remove vigias e documento do usuário no Firestore
       try {
+        const vigiasSnap = await getDocs(collection(db, 'users', uid, 'vigias'));
+        const deletePromises = vigiasSnap.docs.map(vDoc => deleteDoc(vDoc.ref));
+        await Promise.all(deletePromises);
         await deleteDoc(doc(db, 'users', uid));
       } catch (firestoreErr) {
-        console.warn("Aviso ao remover documento do usuário no Firestore:", firestoreErr);
+        console.warn("Aviso ao remover dados do usuário no Firestore:", firestoreErr);
       }
 
       // 3. Limpa dados locais associados a esse usuário
       try {
         await AsyncStorage.multiRemove([
+          `@gardio_vigias_${uid}`,
+          `@gardio_vigia_notificacoes_${uid}`,
+          `@gardio_vigias_last_check_${uid}`,
           `@vigias_${uid}`,
           `@notifications_${uid}`,
         ]);
