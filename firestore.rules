@@ -1,0 +1,43 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Perfil do usuário (leitura, criação, alteração de nome e exclusão de conta)
+    match /users/{userId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+
+      // Vigias do próprio usuário
+      match /vigias/{vigiaId} {
+        allow read, write: if request.auth != null && request.auth.uid == userId;
+      }
+    }
+
+    // Coleção pública de relatos
+    match /relatos/{relatoId} {
+      // Leitura de relatos na tela de mapa e feed
+      allow read: if request.auth != null;
+
+      // Criação de novos relatos
+      allow create: if request.auth != null;
+
+      // Votos (upvote / downvote) e marcações de favoritos
+      allow update: if request.auth != null;
+
+      // Apenas o autor pode excluir o relato
+      allow delete: if request.auth != null && (
+        resource.data.ownerId == request.auth.uid
+      );
+    }
+
+    // Rascunhos de relatos
+    match /rascunhos/{draftId} {
+      allow read, write: if request.auth != null;
+    }
+
+    // Denúncias de relatos
+    match /denuncias/{denunciaId} {
+      allow create: if request.auth != null;
+      allow read, update, delete: if false; // Apenas painel administrativo
+    }
+  }
+}

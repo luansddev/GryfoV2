@@ -1,4 +1,4 @@
-import { createUserWithEmailAndPassword, fetchSignInMethodsForEmail } from 'firebase/auth';
+import { createUserWithEmailAndPassword, fetchSignInMethodsForEmail, updateProfile } from 'firebase/auth';
 import { collection, doc, getDocs, limit, query, setDoc, where } from 'firebase/firestore';
 import { auth, db } from '../../config/firebaseConfig';
 
@@ -60,6 +60,12 @@ export async function registerUser({ name, sobrenome, email, senha, cpf }: UserD
     const normalizedEmail = email.trim().toLowerCase();
     const userCredential = await createUserWithEmailAndPassword(auth, normalizedEmail, senha);
     const uid = userCredential.user.uid;
+
+    try {
+      await updateProfile(userCredential.user, { displayName: name });
+    } catch (profileErr) {
+      console.warn("Aviso ao definir displayName no Auth:", profileErr);
+    }
 
     await setDoc(doc(db, 'users', uid), {
       name,

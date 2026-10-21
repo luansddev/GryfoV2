@@ -1,5 +1,5 @@
 import { useRouter, useFocusEffect } from "expo-router";
-import React, { useState, useCallback, useRef } from 'react';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
 import {
     ActivityIndicator,
     Dimensions,
@@ -14,12 +14,20 @@ import {
     TouchableOpacity,
     View,
     Animated,
+    Keyboard,
+    LayoutAnimation,
+    UIManager,
 } from "react-native";
 
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { FontAwesome6 } from '@expo/vector-icons';
 import { registerUser, checkEmailExists } from '../services/auth/registerUser';
+import PasswordInput from '../components/PasswordInput';
+
+if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+    UIManager.setLayoutAnimationEnabledExperimental(true);
+}
 
 const { width, height } = Dimensions.get('window');
 const AnimatedImageBackground = Animated.createAnimatedComponent(ImageBackground);
@@ -36,11 +44,14 @@ export default function Cadastro() {
     const [confSenha, setConfSenha] = useState('');
     const [secureEntry, setSecureEntry] = useState(true);
     const [secureEntryConf, setSecureEntryConf] = useState(true);
+    const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
+    const [keyboardHeight, setKeyboardHeight] = useState(0);
     const [emailError, setEmailError] = useState('');
     const [formError, setFormError] = useState('');
 
     const cpfInputRef = useRef<TextInput>(null);
     const confSenhaInputRef = useRef<TextInput>(null);
+    const scrollRef = useRef<ScrollView>(null);
 
     const bgOpacity = useRef(new Animated.Value(0)).current;
     const logoOpacity = useRef(new Animated.Value(0)).current;
@@ -50,6 +61,29 @@ export default function Cadastro() {
     const formTranslateX = useRef(new Animated.Value(0)).current;
     const formOpacity = useRef(new Animated.Value(1)).current;
     const hasAnimatedRef = useRef(false);
+
+    useEffect(() => {
+        const showSub = Keyboard.addListener(
+            Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
+            (e) => {
+                LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+                setIsKeyboardVisible(true);
+                setKeyboardHeight(e.endCoordinates.height);
+            }
+        );
+        const hideSub = Keyboard.addListener(
+            Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide',
+            () => {
+                LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+                setIsKeyboardVisible(false);
+                setKeyboardHeight(0);
+            }
+        );
+        return () => {
+            showSub.remove();
+            hideSub.remove();
+        };
+    }, []);
 
     useFocusEffect(
         useCallback(() => {
@@ -76,7 +110,7 @@ export default function Cadastro() {
         }, [])
     );
 
-    const validateEmail = (email: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.toLowerCase());
+    const validateEmail = (email: string) => /^[^s@]+@[^s@]+.[^s@]+$/.test(email.toLowerCase());
 
     const formatCpf = (value: string) => {
         let cleanValue = value.replace(/\D/g, '').substring(0, 11);
@@ -204,20 +238,30 @@ export default function Cadastro() {
                 />
 
                 <KeyboardAvoidingView
-                    behavior="padding"
+                    behavior={Platform.OS === 'ios' ? 'padding' : undefined}
                     style={{ flex: 1 }}
                 >
                     <ScrollView
+                        ref={scrollRef}
+                        style={{ flex: 1 }}
                         contentContainerStyle={[
                             styles.scrollContent,
-                            { paddingTop: insets.top + 4, paddingBottom: insets.bottom + 40 },
+                            {
+                                paddingTop: insets.top + 4,
+                                paddingBottom: Platform.OS === 'android' && keyboardHeight > 0
+                                    ? keyboardHeight + 24
+                                    : insets.bottom + 24,
+                            },
                         ]}
-                        keyboardShouldPersistTaps="always" keyboardDismissMode="none"
+                        keyboardShouldPersistTaps="handled"
+                        keyboardDismissMode="none"
                         showsVerticalScrollIndicator={false}
-                        automaticallyAdjustKeyboardInsets={true}
                     >
-                        {/* Logo */}
-                        <Animated.View style={[styles.logoRow, { opacity: logoOpacity }]}>
+                        {/* Logo: mantém o espaço no layout, mas fica invisível quando o teclado está aberto */}
+                        <Animated.View style={[
+                            styles.logoRow,
+                            { opacity: isKeyboardVisible ? 0 : logoOpacity }
+                        ]}>
                             <Image
                                 source={require('../../assets/images/gardio_branco.png')}
                                 style={styles.headerLogo}
@@ -225,40 +269,44 @@ export default function Cadastro() {
                             />
                         </Animated.View>
 
-                        {/* Step indicator and Forms */}
-                        <Animated.View style={{ flex: 1, opacity: contentOpacity, transform: [{ translateY: contentTranslateY }] }}>
-                            <View style={{ flex: 1 }} />
-                            {/* Step indicator */}
+                        {/* Top Spacer: centraliza a timeline entre a logo e o botão de voltar quando o teclado está fechado */}
+                        <View style={isKeyboardVisible ? { height: 10 } : { flex: 1, minHeight: 12 }} />
+
+                        {/* Step indicator (Timeline) */}
+                        <Animated.View style={{ opacity: contentOpacity, transform: [{ translateY: contentTranslateY }] }}>
                             <View style={styles.stepRow}>
                                 {[1, 2, 3].map((step) => (
                                     <View key={step} style={[styles.stepItem, step === 3 && { flex: 0 }]}>
                                         <View style={[
-                                            styles.stepDot,
-                                            step <= currentStep && styles.stepDotActive,
-                                            step < currentStep && styles.stepDotDone,
+                                             styles.stepDot,
+                                             step <= currentStep && styles.stepDotActive,
+                                             step < currentStep && styles.stepDotDone,
                                         ]}>
-                                            {step < currentStep ? (
-                                                <FontAwesome6 name="check" size={10} color="#fff" />
-                                            ) : (
-                                                <Text style={[
-                                                    styles.stepDotText,
-                                                    step <= currentStep && styles.stepDotTextActive,
-                                                ]}>{step}</Text>
-                                            )}
+                                             {step < currentStep ? (
+                                                 <FontAwesome6 name="check" size={10} color="#fff" />
+                                             ) : (
+                                                 <Text style={[
+                                                     styles.stepDotText,
+                                                     step <= currentStep && styles.stepDotTextActive,
+                                                 ]}>{step}</Text>
+                                             )}
                                         </View>
                                         {step < 3 && (
-                                            <View style={[
-                                                styles.stepLine,
-                                                step < currentStep && styles.stepLineActive,
-                                            ]} />
+                                             <View style={[
+                                                 styles.stepLine,
+                                                 step < currentStep && styles.stepLineActive,
+                                             ]} />
                                         )}
                                     </View>
                                 ))}
                             </View>
+                        </Animated.View>
 
-                            {/* Spacer */}
-                            <View style={{ flex: 1, minHeight: 20 }} />
+                        {/* Bottom Spacer: recolhe totalmente com teclado aberto (juntando a timeline ao botão de voltar) e expande igual ao Top Spacer quando fechado */}
+                        <View style={isKeyboardVisible ? { height: 0 } : { flex: 1, minHeight: 12 }} />
 
+                        {/* Forms */}
+                        <Animated.View style={{ opacity: contentOpacity, transform: [{ translateY: contentTranslateY }] }}>
                             {screenVisible === "nome" ? (
                                 <View style={styles.formArea}>
                                     <TouchableOpacity onPress={voltar} style={styles.backBtnInline} activeOpacity={0.7}>
@@ -288,8 +336,8 @@ export default function Cadastro() {
                                                 style={styles.input}
                                                 autoCapitalize="words"
                                                 autoCorrect={false}
-                                                autoComplete="name"
-                                                textContentType="name"
+                                                autoComplete="off"
+                                                importantForAutofill="no"
                                                 cursorColor="#fff"
                                                 selectionColor="rgba(255,255,255,0.3)"
                                                 underlineColorAndroid="transparent"
@@ -355,8 +403,8 @@ export default function Cadastro() {
                                                 keyboardType="email-address"
                                                 autoCapitalize="none"
                                                 autoCorrect={false}
-                                                autoComplete="email"
-                                                textContentType="emailAddress"
+                                                autoComplete="off"
+                                                importantForAutofill="no"
                                                 cursorColor="#fff"
                                                 selectionColor="rgba(255,255,255,0.3)"
                                                 underlineColorAndroid="transparent"
@@ -391,6 +439,8 @@ export default function Cadastro() {
                                                 onChangeText={text => setCpf(formatCpf(text))}
                                                 keyboardType="numeric"
                                                 autoCorrect={false}
+                                                autoComplete="off"
+                                                importantForAutofill="no"
                                                 maxLength={14}
                                                 cursorColor="#fff"
                                                 selectionColor="rgba(255,255,255,0.3)"
@@ -441,18 +491,14 @@ export default function Cadastro() {
                                 {/* STEP 3: Password */}
                                 {screenVisible === "senha" && (
                                     <View style={[styles.formArea, { paddingTop: 0 }]}>
-                                        <Text style={styles.subtitle}>Por último, crie uma senha para a sua conta:</Text>
-                                        <Text style={styles.hint}>
-                                            <FontAwesome6 name="circle-info" size={12} color="rgba(255,255,255,0.4)" />
-                                            {"  "}Mínimo de 6 caracteres
-                                        </Text>
+                                        <Text style={styles.subtitle}>Por fim, crie sua senha de acesso:</Text>
 
                                         <View collapsable={false} style={[
                                             styles.inputWrapper,
                                             ((senha.length > 0 && senha.length < 6) || (confSenha.length > 0 && senha !== confSenha)) && styles.inputError,
                                         ]}>
                                             <FontAwesome6 name="lock" size={15} color="rgba(255,255,255,0.5)" style={styles.inputIcon} />
-                                            <TextInput
+                                            <PasswordInput
                                                 placeholder="Senha"
                                                 blurOnSubmit={false}
                                                 placeholderTextColor="rgba(255,255,255,0.4)"
@@ -464,8 +510,8 @@ export default function Cadastro() {
                                                 secureTextEntry={secureEntry}
                                                 autoCapitalize="none"
                                                 autoCorrect={false}
-                                                autoComplete="new-password"
-                                                textContentType="newPassword"
+                                                autoComplete="off"
+                                                importantForAutofill="no"
                                                 cursorColor="#fff"
                                                 selectionColor="rgba(255,255,255,0.3)"
                                                 underlineColorAndroid="transparent"
@@ -483,7 +529,7 @@ export default function Cadastro() {
                                             ((confSenha.length > 0 && confSenha.length < 6) || (senha.length > 0 && senha !== confSenha)) && styles.inputError,
                                         ]}>
                                             <FontAwesome6 name="lock" size={15} color="rgba(255,255,255,0.5)" style={styles.inputIcon} />
-                                            <TextInput
+                                            <PasswordInput
                                                 ref={confSenhaInputRef}
                                                 placeholder="Repita a senha"
                                                 blurOnSubmit={false}
@@ -496,8 +542,8 @@ export default function Cadastro() {
                                                 secureTextEntry={secureEntryConf}
                                                 autoCapitalize="none"
                                                 autoCorrect={false}
-                                                autoComplete="new-password"
-                                                textContentType="newPassword"
+                                                autoComplete="off"
+                                                importantForAutofill="no"
                                                 cursorColor="#fff"
                                                 selectionColor="rgba(255,255,255,0.3)"
                                                 underlineColorAndroid="transparent"
@@ -585,16 +631,18 @@ const styles = StyleSheet.create({
     logoRow: {
         alignItems: 'center',
         marginTop: 8,
+        marginBottom: 4,
     },
     headerLogo: {
         width: 460,
-        height: 150,
+        maxWidth: '100%',
+        height: 140,
     },
     stepRow: {
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'center',
-        marginTop: 28,
+        marginVertical: 12,
         paddingHorizontal: 30,
     },
     stepItem: {
@@ -723,6 +771,7 @@ const styles = StyleSheet.create({
         color: '#fff',
         fontFamily: 'texgyR',
         fontSize: 16,
+        includeFontPadding: false,
     },
     secondaryBtn: {
         backgroundColor: 'rgba(255,255,255,0.12)',
@@ -741,6 +790,7 @@ const styles = StyleSheet.create({
         color: '#fff',
         fontFamily: 'GlacialR',
         fontSize: 16,
+        includeFontPadding: false,
     },
     concludeBtn: {
         backgroundColor: '#2563eb',
@@ -758,8 +808,8 @@ const styles = StyleSheet.create({
     },
     switchLink: {
         alignItems: 'center',
-        marginTop: 20,
-        marginBottom: 40,
+        marginTop: 16,
+        marginBottom: 24,
     },
     switchLinkText: {
         color: 'rgba(255,255,255,0.5)',

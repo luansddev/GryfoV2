@@ -108,8 +108,8 @@ export default function Index() {
                                 onPress={navegarCad}
                                 activeOpacity={0.8}
                             >
-                                <FontAwesome6 name="user-plus" size={16} color="#fff" />
-                                <Text style={styles.btnPrimaryText} numberOfLines={1}>Crie uma conta</Text>
+                                <FontAwesome6 name="user-plus" size={16} color="#fff" style={styles.btnIcon} />
+                                <Text style={styles.btnPrimaryText}>Crie uma conta</Text>
                             </TouchableOpacity>
 
                             <View style={styles.dividerRow}>
@@ -123,8 +123,8 @@ export default function Index() {
                                 onPress={navegarLog}
                                 activeOpacity={0.8}
                             >
-                                <FontAwesome6 name="right-to-bracket" size={16} color="#fff" />
-                                <Text style={styles.btnSecondaryText} numberOfLines={1}>Entrar</Text>
+                                <FontAwesome6 name="right-to-bracket" size={16} color="#fff" style={styles.btnIcon} />
+                                <Text style={styles.btnSecondaryText}>Entrar</Text>
                             </TouchableOpacity>
                         </View>
                     </Animated.View>
@@ -188,6 +188,8 @@ const styles = StyleSheet.create({
         color: "#fff",
         fontFamily: "texgyR",
         fontSize: 16,
+        includeFontPadding: false,
+        flexShrink: 0,
     },
     dividerRow: {
         flexDirection: "row",
@@ -221,5 +223,10 @@ const styles = StyleSheet.create({
         color: "#fff",
         fontFamily: "texgyR",
         fontSize: 16,
+        includeFontPadding: false,
+        flexShrink: 0,
+    },
+    btnIcon: {
+        transform: [{ translateY: 1 }],
     },
 });

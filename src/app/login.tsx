@@ -14,12 +14,14 @@ import {
     TouchableOpacity,
     View,
     Animated,
+    Keyboard,
 } from "react-native";
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { FontAwesome6 } from '@expo/vector-icons';
 import { signInWithEmailAndPassword } from "firebase/auth";
 import { auth } from '../config/firebaseConfig';
+import PasswordInput from '../components/PasswordInput';
 
 const { width, height } = Dimensions.get('window');
 const AnimatedImageBackground = Animated.createAnimatedComponent(ImageBackground);
@@ -31,7 +33,31 @@ export default function Login() {
     const [isLoading, setIsLoading] = useState(false);
     const [errorMessage, setErrorMessage] = useState('');
     const [secureEntry, setSecureEntry] = useState(true);
+    const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
+    const [keyboardHeight, setKeyboardHeight] = useState(0);
     const senhaRef = useRef<TextInput>(null);
+    const scrollRef = useRef<ScrollView>(null);
+
+    React.useEffect(() => {
+        const showSub = Keyboard.addListener(
+            Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
+            (e) => {
+                setIsKeyboardVisible(true);
+                setKeyboardHeight(e.endCoordinates.height);
+            }
+        );
+        const hideSub = Keyboard.addListener(
+            Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide',
+            () => {
+                setIsKeyboardVisible(false);
+                setKeyboardHeight(0);
+            }
+        );
+        return () => {
+            showSub.remove();
+            hideSub.remove();
+        };
+    }, []);
 
     const bgOpacity = useRef(new Animated.Value(0)).current;
     const logoOpacity = useRef(new Animated.Value(0)).current;
@@ -104,20 +130,30 @@ export default function Login() {
                 />
 
                 <KeyboardAvoidingView
-                    behavior="padding"
+                    behavior={Platform.OS === 'ios' ? 'padding' : undefined}
                     style={{ flex: 1 }}
                 >
                     <ScrollView
+                        ref={scrollRef}
+                        style={{ flex: 1 }}
                         contentContainerStyle={[
                             styles.scrollContent,
-                            { paddingTop: insets.top + 4, paddingBottom: insets.bottom + 40 },
+                            {
+                                paddingTop: insets.top + 4,
+                                paddingBottom: Platform.OS === 'android' && keyboardHeight > 0
+                                    ? keyboardHeight + 24
+                                    : insets.bottom + 24,
+                            },
                         ]}
-                        keyboardShouldPersistTaps="handled" keyboardDismissMode="none"
+                        keyboardShouldPersistTaps="handled"
+                        keyboardDismissMode="none"
                         showsVerticalScrollIndicator={false}
-                        automaticallyAdjustKeyboardInsets={true}
                     >
-                        {/* Logo */}
-                        <Animated.View style={[styles.logoRow, { opacity: logoOpacity }]}>
+                        {/* Logo: mantém o espaço no layout, mas fica invisível quando o teclado está aberto */}
+                        <Animated.View style={[
+                            styles.logoRow,
+                            { opacity: isKeyboardVisible ? 0 : logoOpacity }
+                        ]}>
                             <Image
                                 source={require('../../assets/images/gardio_branco.png')}
                                 style={styles.headerLogo}
@@ -125,8 +161,8 @@ export default function Login() {
                             />
                         </Animated.View>
 
-                        {/* Spacer */}
-                        <View style={{ flex: 1, minHeight: 40 }} />
+                        {/* Flexible Spacer: pushes form down when screen is tall, collapses cleanly when keyboard opens */}
+                        <View style={isKeyboardVisible ? { height: 12 } : { flex: 1, minHeight: 20 }} />
 
                         {/* Form area */}
                         <Animated.View style={[styles.formArea, { opacity: contentOpacity, transform: [{ translateY: contentTranslateY }] }]}>
@@ -146,8 +182,8 @@ export default function Login() {
                                     keyboardType="email-address"
                                     autoCapitalize="none"
                                     autoCorrect={false}
-                                    autoComplete="email"
-                                    textContentType="emailAddress"
+                                    autoComplete="off"
+                                    importantForAutofill="no"
                                     cursorColor="#fff"
                                     selectionColor="rgba(255,255,255,0.3)"
                                     underlineColorAndroid="transparent"
@@ -165,7 +201,7 @@ export default function Login() {
                             {/* Password input */}
                             <View collapsable={false} style={styles.inputWrapper}>
                                 <FontAwesome6 name="lock" size={15} color="rgba(255,255,255,0.5)" style={styles.inputIcon} />
-                                <TextInput
+                                <PasswordInput
                                     ref={senhaRef}
                                     placeholder="Senha"
                                     placeholderTextColor="rgba(255,255,255,0.4)"
@@ -173,8 +209,8 @@ export default function Login() {
                                     style={styles.input}
                                     autoCapitalize="none"
                                     autoCorrect={false}
-                                    autoComplete="password"
-                                    textContentType="password"
+                                    autoComplete="off"
+                                    importantForAutofill="no"
                                     cursorColor="#fff"
                                     selectionColor="rgba(255,255,255,0.3)"
                                     underlineColorAndroid="transparent"
@@ -217,7 +253,7 @@ export default function Login() {
                                     <ActivityIndicator size="small" color="#fff" />
                                 ) : (
                                     <>
-                                        <FontAwesome6 name="right-to-bracket" size={16} color="#fff" />
+                                        <FontAwesome6 name="right-to-bracket" size={16} color="#fff" style={{ transform: [{ translateY: 1 }] }} />
                                         <Text style={styles.loginBtnText}>Vamos lá</Text>
                                     </>
                                 )}
@@ -254,10 +290,12 @@ const styles = StyleSheet.create({
     logoRow: {
         alignItems: 'center',
         marginTop: 8,
+        marginBottom: 16,
     },
     headerLogo: {
         width: 460,
-        height: 150,
+        maxWidth: '100%',
+        height: 140,
     },
     formArea: {
         marginBottom: 40,
@@ -336,6 +374,7 @@ const styles = StyleSheet.create({
         color: '#fff',
         fontFamily: 'texgyR',
         fontSize: 17,
+        includeFontPadding: false,
     },
     switchLink: {
         alignItems: 'center',

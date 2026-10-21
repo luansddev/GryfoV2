@@ -18,7 +18,7 @@ import {
 } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { auth, db } from '../config/firebaseConfig';
-import { signOut, EmailAuthProvider, reauthenticateWithCredential, deleteUser } from 'firebase/auth';
+import { signOut, EmailAuthProvider, reauthenticateWithCredential, deleteUser, updateProfile } from 'firebase/auth';
 import { FontAwesome6 } from '@expo/vector-icons';
 import { useVigias } from '../context/VigiasContext';
 import { collection, query, where, getCountFromServer, doc, getDoc, updateDoc, setDoc, deleteDoc, getDocs } from 'firebase/firestore';
@@ -26,6 +26,7 @@ import { getDeviceId } from '../utils/device';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import PasswordInput from '../components/PasswordInput';
 
 const { width, height } = Dimensions.get('window');
 const AnimatedImageBackground = Animated.createAnimatedComponent(ImageBackground);
@@ -62,6 +63,11 @@ export default function Conta() {
       if (user?.uid) {
         const userDocRef = doc(db, 'users', user.uid);
         await setDoc(userDocRef, { name: newName.trim() }, { merge: true });
+        try {
+          await updateProfile(user, { displayName: newName.trim() });
+        } catch (authErr) {
+          console.warn("Aviso ao atualizar displayName no Auth:", authErr);
+        }
         setUserData(prev => prev ? { ...prev, name: newName.trim() } : { name: newName.trim() });
       }
       setIsEditNameModalVisible(false);
@@ -442,7 +448,7 @@ export default function Conta() {
             </Text>
 
             <View style={styles.passwordInputContainer}>
-              <TextInput
+              <PasswordInput
                 style={styles.passwordInput}
                 value={deletePassword}
                 onChangeText={(text) => {
@@ -453,6 +459,8 @@ export default function Conta() {
                 placeholderTextColor="rgba(255,255,255,0.4)"
                 secureTextEntry={!showDeletePassword}
                 autoCapitalize="none"
+                autoComplete="off"
+                importantForAutofill="no"
                 editable={!isDeletingAccount}
               />
               <TouchableOpacity
