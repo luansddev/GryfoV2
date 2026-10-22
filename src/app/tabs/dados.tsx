@@ -248,8 +248,8 @@ export default function Dados() {
 
   const insets = useSafeAreaInsets();
   const floatingControlsBottom = getFloatingControlsBottom(insets.bottom);
-  const { location: searchedLocation, searchMode, searchedCity, userCity } = useSearchLocation();
-  const { mapRef, region: sharedRegion, registerMapChildren, activeTab } = useSharedMap();
+  const { location: searchedLocation, searchMode, searchedCity, userCity, setSearchMode, setSearchedCity } = useSearchLocation();
+  const { mapRef, region: sharedRegion, registerMapChildren, activeTab, userLocation: sharedUserLocation } = useSharedMap();
 
   const [region, setRegion] = useState<Region>({
     latitude: -23.5505,
@@ -848,25 +848,21 @@ export default function Dados() {
               <TouchableOpacity
                 style={styles.locationFab}
                 onPress={() => {
-                  if (searchMode && searchedLocation) {
+                  setSearchMode(false);
+                  setSearchedCity(null);
+                  const targetLoc = userLocation || sharedUserLocation;
+                  if (targetLoc) {
                     mapRef.current?.animateToRegion({
-                      latitude: searchedLocation.latitude,
-                      longitude: searchedLocation.longitude,
-                      latitudeDelta: 0.08,
-                      longitudeDelta: 0.08,
-                    });
-                  } else if (!searchMode && userLocation) {
-                    mapRef.current?.animateToRegion({
-                      latitude: userLocation.coords.latitude,
-                      longitude: userLocation.coords.longitude,
+                      latitude: targetLoc.coords.latitude,
+                      longitude: targetLoc.coords.longitude,
                       latitudeDelta: 0.08,
                       longitudeDelta: 0.08,
                     });
                   }
                 }}
               >
-                <FontAwesome6 name={searchMode ? "location-dot" : "location-crosshairs"} size={14} color="#333" />
-                <Text style={styles.locationFabText}>{searchMode ? "Ir ao local" : "Meu local"}</Text>
+                <FontAwesome6 name="location-crosshairs" size={14} color="#333" />
+                <Text style={styles.locationFabText}>Meu local</Text>
               </TouchableOpacity>
 
               <TouchableOpacity

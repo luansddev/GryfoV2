@@ -230,13 +230,23 @@ const Rascunhos = () => {
       <AddRelatoModal
         visible={isModalVisible}
         onClose={handleCloseModal}
-        draftData={editingDraft ? { texto: editingDraft.texto, crimeKey: editingDraft.crimeKey } : undefined}
+        draftData={editingDraft ? {
+          texto: editingDraft.texto,
+          crimeKey: editingDraft.crimeKey,
+          horarioAproximado: editingDraft.horarioAproximado,
+          frequencia: editingDraft.frequencia,
+        } : undefined}
         draftId={editingDraft?.id}
         initialLocation={editingDraft?.latitude && editingDraft?.longitude ? { latitude: editingDraft.latitude, longitude: editingDraft.longitude } : undefined}
         initialCityName={editingDraft?.cidade}
-        onChangeLocation={async (text, crimeKey) => {
+        onChangeLocation={async (text, crimeKey, horario, freq) => {
           if (editingDraft?.id) {
-            await updateDoc(doc(db, 'rascunhos', editingDraft.id), { texto: text, crimeKey });
+            await updateDoc(doc(db, 'rascunhos', editingDraft.id), {
+              texto: text,
+              crimeKey,
+              horarioAproximado: horario ?? null,
+              frequencia: freq ?? 'pontual',
+            });
           }
           handleCloseModal();
           router.push({ pathname: '/home', params: { switchTab: 'relatos', editDraftId: editingDraft?.id } });

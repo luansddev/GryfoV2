@@ -109,7 +109,7 @@ export default function Index() {
                                 activeOpacity={0.8}
                             >
                                 <FontAwesome6 name="user-plus" size={16} color="#fff" style={styles.btnIcon} />
-                                <Text style={styles.btnPrimaryText}>Crie uma conta</Text>
+                                <Text style={styles.btnPrimaryText} numberOfLines={1}>Crie uma conta</Text>
                             </TouchableOpacity>
 
                             <View style={styles.dividerRow}>
@@ -124,7 +124,7 @@ export default function Index() {
                                 activeOpacity={0.8}
                             >
                                 <FontAwesome6 name="right-to-bracket" size={16} color="#fff" style={styles.btnIcon} />
-                                <Text style={styles.btnSecondaryText}>Entrar</Text>
+                                <Text style={styles.btnSecondaryText} numberOfLines={1}>Entrar</Text>
                             </TouchableOpacity>
                         </View>
                     </Animated.View>
@@ -147,14 +147,17 @@ const styles = StyleSheet.create({
     content: {
         flex: 1,
         paddingHorizontal: 28,
+        width: "100%",
     },
     logoContainer: {
         alignItems: "center",
-        marginTop: 20,
+        marginTop: 8,
+        width: "100%",
     },
     logo: {
-        width: 535,
-        height: 173,
+        width: "100%",
+        maxWidth: 300,
+        height: 180,
     },
     bottomSection: {
         width: "100%",
@@ -189,7 +192,6 @@ const styles = StyleSheet.create({
         fontFamily: "texgyR",
         fontSize: 16,
         includeFontPadding: false,
-        flexShrink: 0,
     },
     dividerRow: {
         flexDirection: "row",
@@ -224,7 +226,6 @@ const styles = StyleSheet.create({
         fontFamily: "texgyR",
         fontSize: 16,
         includeFontPadding: false,
-        flexShrink: 0,
     },
     btnIcon: {
         transform: [{ translateY: 1 }],

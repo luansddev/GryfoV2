@@ -32,6 +32,14 @@ export default function TopMenu({ renderTabBar }: { renderTabBar?: () => React.R
     }
   }, [searchedCity, cities]);
 
+  useEffect(() => {
+    if (!searchMode) {
+      LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+      setSearchText('');
+      setShowDropdown(false);
+    }
+  }, [searchMode]);
+
   const loadUserLocation = async () => {
     const { status } = await Location.requestForegroundPermissionsAsync();
     if (status !== 'granted') {

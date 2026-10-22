@@ -34,6 +34,7 @@ import { getCrimeIcon, formatCrimeName } from '../../constants/CrimeData';
 import { getFloatingControlsBottom } from '../../constants/Layout';
 import { onAuthStateChanged } from 'firebase/auth';
 import { auth } from '../../config/firebaseConfig';
+import { useSearchLocation } from '../../context/SearchLocationContext';
 
 /* ================= TYPES ================= */
 
@@ -127,6 +128,7 @@ const VigiaRelatoMarker = React.memo(({ notification }: { notification: VigiaNot
 
 export default function Locais() {
   const { setIsCreatingVigia } = useVigiaCreation();
+  const { setSearchMode, setSearchedCity } = useSearchLocation();
   const insets = useSafeAreaInsets();
   const floatingControlsBottom = getFloatingControlsBottom(insets.bottom);
   const params = useLocalSearchParams();
@@ -807,10 +809,13 @@ export default function Locais() {
               <TouchableOpacity
                 style={styles.locationFab}
                 onPress={() => {
-                  if (userLocation) {
+                  setSearchMode(false);
+                  setSearchedCity(null);
+                  const targetLoc = userLocation || sharedUserLocation;
+                  if (targetLoc) {
                     mapRef.current?.animateToRegion({
-                      latitude: userLocation.coords.latitude,
-                      longitude: userLocation.coords.longitude,
+                      latitude: targetLoc.coords.latitude,
+                      longitude: targetLoc.coords.longitude,
                       latitudeDelta: 0.08,
                       longitudeDelta: 0.08,
                     });

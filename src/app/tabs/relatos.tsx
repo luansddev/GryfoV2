@@ -111,6 +111,14 @@ const RelatoItemMarker = React.memo(({ relato, uiMode, onSelect, markerColor }: 
   );
 });
 
+// ============================================================================
+// CONFIGURAÇÃO TEMPORÁRIA: Filtragem de relatos no mapa
+// - false: Todos os relatos da cidade são exibidos no mapa simultaneamente.
+// - true:  Apenas relatos da natureza selecionada (vida/física/patrimônio) são exibidos.
+// Para reativar a filtragem por natureza, basta alterar esta constante para `true`.
+// ============================================================================
+const ENABLE_MAP_FILTER = false;
+
 export default function Relatos() {
   const router = useRouter();
   const params = useLocalSearchParams();
@@ -142,6 +150,8 @@ export default function Relatos() {
   
   const [activeDraftText, setActiveDraftText] = useState<string | null>(null);
   const [activeDraftCrime, setActiveDraftCrime] = useState<string | null>(null);
+  const [activeDraftHorario, setActiveDraftHorario] = useState<number | undefined>(undefined);
+  const [activeDraftFrequencia, setActiveDraftFrequencia] = useState<'pontual' | 'recorrente' | undefined>(undefined);
   const [activeDraftId, setActiveDraftId] = useState<string | undefined>(undefined);
   const [showNoRelatosTooltip, setShowNoRelatosTooltip] = useState(false);
 
@@ -215,9 +225,15 @@ export default function Relatos() {
     const clustersPatr = superclusterPatrimony.getClusters(bbox, zoom).map(c => ({...c, properties: {...c.properties, nature: 'patrimony'}}));
 
     let newClusters = [];
-    if (mapFilter === 'life') newClusters.push(...clustersLife);
-    if (mapFilter === 'physical') newClusters.push(...clustersPhys);
-    if (mapFilter === 'patrimony') newClusters.push(...clustersPatr);
+    if (!ENABLE_MAP_FILTER) {
+      // Exibe todos os relatos da cidade no mapa (sem filtrar por natureza)
+      newClusters.push(...clustersLife, ...clustersPhys, ...clustersPatr);
+    } else {
+      // Filtragem por natureza ativada
+      if (mapFilter === 'life') newClusters.push(...clustersLife);
+      if (mapFilter === 'physical') newClusters.push(...clustersPhys);
+      if (mapFilter === 'patrimony') newClusters.push(...clustersPatr);
+    }
 
     setVisibleClusters(newClusters);
   }, [sharedRegion, superclusterLife, superclusterPhysical, superclusterPatrimony, mapFilter]);
@@ -279,6 +295,8 @@ export default function Relatos() {
             const data = docSnap.data();
             setActiveDraftText(data.texto || null);
             setActiveDraftCrime(data.crimeKey || null);
+            setActiveDraftHorario(data.horarioAproximado);
+            setActiveDraftFrequencia(data.frequencia);
             setActiveDraftId(draftId);
             if (data.latitude && data.longitude) {
               setSelectedPoint({ latitude: data.latitude, longitude: data.longitude });
@@ -441,6 +459,8 @@ export default function Relatos() {
     setSelectedCityName(null);
     setActiveDraftText(null);
     setActiveDraftCrime(null);
+    setActiveDraftHorario(undefined);
+    setActiveDraftFrequencia(undefined);
     setActiveDraftId(undefined);
     setLoadingAddress(false);
     setSearchedPoint(null);
@@ -802,10 +822,13 @@ export default function Relatos() {
               <TouchableOpacity
                 style={styles.locationFab}
                 onPress={() => {
-                  if (userLocation) {
+                  setSearchMode(false);
+                  setSearchedCity(null);
+                  const targetLoc = userLocation || sharedUserLocation;
+                  if (targetLoc) {
                     mapRef.current?.animateToRegion({
-                      latitude: userLocation.coords.latitude,
-                      longitude: userLocation.coords.longitude,
+                      latitude: targetLoc.coords.latitude,
+                      longitude: targetLoc.coords.longitude,
                       latitudeDelta: 0.08,
                       longitudeDelta: 0.08,
                     });
@@ -816,7 +839,8 @@ export default function Relatos() {
                 <Text style={styles.locationFabText}>Meu local</Text>
               </TouchableOpacity>
 
-              {(() => {
+              {/* Seletor de natureza do mapa (exibido apenas se a filtragem estiver ativa) */}
+              {ENABLE_MAP_FILTER && (() => {
                 const currentNature = mapNatureOptions.find(opt => opt.id === mapFilter) || mapNatureOptions[0];
                 return (
                   <TouchableOpacity
@@ -1160,17 +1184,28 @@ export default function Relatos() {
           setIsAddModalVisible(false);
           setSelectedPoint(null);
           setSelectedCityName(null);
+          setSelectedAddress(null);
           setActiveDraftText(null);
           setActiveDraftCrime(null);
+          setActiveDraftHorario(undefined);
+          setActiveDraftFrequencia(undefined);
           setActiveDraftId(undefined);
         }}
         initialLocation={selectedPoint}
         initialCityName={selectedCityName}
-        draftData={(activeDraftText || activeDraftCrime) ? { texto: activeDraftText || '', crimeKey: activeDraftCrime } : undefined}
+        initialAddress={selectedAddress}
+        draftData={(activeDraftText || activeDraftCrime || activeDraftHorario !== undefined || activeDraftFrequencia) ? {
+          texto: activeDraftText || '',
+          crimeKey: activeDraftCrime,
+          horarioAproximado: activeDraftHorario,
+          frequencia: activeDraftFrequencia,
+        } : undefined}
         draftId={activeDraftId}
-        onChangeLocation={(text, crimeKey) => {
+        onChangeLocation={(text, crimeKey, horario, freq) => {
           setActiveDraftText(text);
           setActiveDraftCrime(crimeKey);
+          if (horario !== undefined) setActiveDraftHorario(horario);
+          if (freq !== undefined) setActiveDraftFrequencia(freq);
           setIsAddModalVisible(false);
           setCreatingStep('picking');
           setUiMode('creating_relato');
@@ -1179,45 +1214,47 @@ export default function Relatos() {
       />
 
       {/* FILTER MODAL */}
-      <Modal
-        visible={isFilterModalOpen}
-        transparent={true}
-        animationType="fade"
-        onRequestClose={() => setIsFilterModalOpen(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.filterModalContent}>
-            <View style={styles.filterModalHeader}>
-              <Text style={styles.filterModalTitle}>Filtrar por Natureza</Text>
-              <TouchableOpacity onPress={() => setIsFilterModalOpen(false)} style={styles.filterModalCloseBtn}>
-                <FontAwesome6 name="xmark" size={18} color="#666" />
-              </TouchableOpacity>
-            </View>
+      {ENABLE_MAP_FILTER && (
+        <Modal
+          visible={isFilterModalOpen}
+          transparent={true}
+          animationType="fade"
+          onRequestClose={() => setIsFilterModalOpen(false)}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.filterModalContent}>
+              <View style={styles.filterModalHeader}>
+                <Text style={styles.filterModalTitle}>Filtrar por Natureza</Text>
+                <TouchableOpacity onPress={() => setIsFilterModalOpen(false)} style={styles.filterModalCloseBtn}>
+                  <FontAwesome6 name="xmark" size={18} color="#666" />
+                </TouchableOpacity>
+              </View>
 
-            <View style={styles.filterModalNatureSection}>
-              {mapNatureOptions.map(item => {
-                const isSelected = mapFilter === item.id;
-                return (
-                  <TouchableOpacity
-                    key={item.id}
-                    style={[styles.filterModalNatureMenuItem, isSelected && styles.filterModalNatureMenuItemActive]}
-                    onPress={() => { setMapFilter(item.id as any); setIsFilterModalOpen(false); }}
-                    activeOpacity={0.7}
-                  >
-                    <View style={styles.filterModalNatureTriggerLeft}>
-                      <View style={[styles.filterModalNatureDot, { backgroundColor: item.color }]} />
-                      <Text style={[styles.filterModalNatureMenuText, isSelected && styles.filterModalNatureMenuTextActive]}>
-                        {item.label}
-                      </Text>
-                    </View>
-                    {isSelected && <FontAwesome6 name="check" size={12} color="#000" />}
-                  </TouchableOpacity>
-                );
-              })}
+              <View style={styles.filterModalNatureSection}>
+                {mapNatureOptions.map(item => {
+                  const isSelected = mapFilter === item.id;
+                  return (
+                    <TouchableOpacity
+                      key={item.id}
+                      style={[styles.filterModalNatureMenuItem, isSelected && styles.filterModalNatureMenuItemActive]}
+                      onPress={() => { setMapFilter(item.id as any); setIsFilterModalOpen(false); }}
+                      activeOpacity={0.7}
+                    >
+                      <View style={styles.filterModalNatureTriggerLeft}>
+                        <View style={[styles.filterModalNatureDot, { backgroundColor: item.color }]} />
+                        <Text style={[styles.filterModalNatureMenuText, isSelected && styles.filterModalNatureMenuTextActive]}>
+                          {item.label}
+                        </Text>
+                      </View>
+                      {isSelected && <FontAwesome6 name="check" size={12} color="#000" />}
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
             </View>
           </View>
-        </View>
-      </Modal>
+        </Modal>
+      )}
     </View>
   );
 }

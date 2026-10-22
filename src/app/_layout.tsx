@@ -3,7 +3,7 @@ import { Tabs, usePathname, useRouter, useSegments } from 'expo-router';
 import { useFonts } from 'expo-font';
 import * as SplashScreen from 'expo-splash-screen';
 import { useEffect, useState, useCallback } from 'react';
-import { Feather, AntDesign, Ionicons } from '@expo/vector-icons';
+import { Feather, AntDesign, Ionicons, MaterialIcons } from '@expo/vector-icons';
 import BottomMenu from '../../components/BottomMenu';
 import { View, StyleSheet } from 'react-native';
 import { SearchLocationProvider } from '../context/SearchLocationContext';
@@ -76,6 +76,7 @@ export default function RootLayout() {
     ...Feather.font,
     ...AntDesign.font,
     ...Ionicons.font,
+    ...MaterialIcons.font,
     'Avant': require('../../assets/fontes/AvantGarde-Bold.otf'),
     'GlacialB': require('../../assets/fontes/GlacialIndifference-Bold.otf'),
     'GlaicalI': require('../../assets/fontes/GlacialIndifference-Italic.otf'),
