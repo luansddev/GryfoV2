@@ -99,4 +99,12 @@ export interface AnalysisResult {
     hasEnoughHistoryForTrend: boolean;
     hasEnoughHistoryForYoY: boolean;
   };
+  rawCrimes?: Record<string, number>;
+  monthlyCrimes?: {
+    year: number;
+    month: number;
+    crimes: Record<string, number>;
+    total: number;
+  }[];
+  stateCrimeTotals?: Record<string, number>;
 }

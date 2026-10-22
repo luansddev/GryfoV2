@@ -24,6 +24,7 @@ import { normalizarCidade } from '../../context/Normalizer';
 import { prettifySspKey } from '../../services/analytics/CityDirectory';
 
 import { LinearGradient } from 'expo-linear-gradient';
+import { useRouter } from 'expo-router';
 import Svg, { Path } from 'react-native-svg';
 
 import {
@@ -209,6 +210,7 @@ const ClusterMarker = React.memo(({ cluster, mapFilter, onPress }: { cluster: an
 /* ================= COMPONENTE PRINCIPAL ================= */
 
 export default function Dados() {
+  const router = useRouter();
   const [userLocation, setUserLocation] = useState<Location.LocationObject | null>(null);
   const [loading, setLoading] = useState(true);
   const [dadosCidade, setDadosCidade] = useState<any>(null);
@@ -665,20 +667,16 @@ export default function Dados() {
     );
   };
 
-  // Lista detalhada com ícones específicos e barras de magnitude horizontal
+  // Lista detalhada com números brutos por categoria
   const renderCategoryCrimeList = (
     crimes: { name: string; count: number }[],
-    totalCategory: number,
-    barColor: string
+    _totalCategory?: number,
+    _barColor?: string
   ) => {
-    const maxCount = Math.max(...crimes.map(c => c.count), 1);
-
     return (
       <View style={styles.crimeListContainer}>
         {crimes.map((crime, index) => {
           const iconInfo = getCrimeIcon(crime.name);
-          const pctOfCat = totalCategory > 0 ? ((crime.count / totalCategory) * 100).toFixed(1) : '0';
-          const fillWidth = (crime.count / maxCount) * 100;
 
           return (
             <View key={index} style={styles.crimeDetailCard}>
@@ -690,22 +688,8 @@ export default function Dados() {
                   {crime.name}
                 </Text>
                 <View style={styles.crimeDetailCountBadge}>
-                  <Text style={styles.crimeDetailCountText}>{crime.count}</Text>
-                  <Text style={styles.crimeDetailCountPct}>{pctOfCat}%</Text>
+                  <Text style={styles.crimeDetailCountText}>{crime.count} casos</Text>
                 </View>
-              </View>
-
-              {/* Barra de magnitude visual sem corte */}
-              <View style={styles.crimeDetailBarTrack}>
-                <View
-                  style={[
-                    styles.crimeDetailBarFill,
-                    {
-                      width: `${Math.max(fillWidth, 2)}%`,
-                      backgroundColor: barColor,
-                    },
-                  ]}
-                />
               </View>
             </View>
           );
@@ -1050,6 +1034,31 @@ export default function Dados() {
         style={[styles.scrollViewContainer, animatedScrollStyle]}
         contentContainerStyle={{ paddingBottom: Math.max(130, floatingControlsBottom + 10), paddingTop: 14 }}
       >
+        {/* BOTÃO EM DESTAQUE: VER ANÁLISE APURADA */}
+        <TouchableOpacity
+          style={styles.analysisCtaButton}
+          onPress={() => router.push('/analise')}
+          activeOpacity={0.85}
+        >
+          <LinearGradient
+            colors={['#1c1f75', '#07268a', '#2563eb']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 0 }}
+            style={styles.analysisCtaGradient}
+          >
+            <View style={styles.analysisCtaIconWrap}>
+              <FontAwesome6 name="chart-line" size={16} color="#fff" />
+            </View>
+            <View style={styles.analysisCtaTextWrap}>
+              <Text style={styles.analysisCtaTitle}>Ver análise apurada</Text>
+              <Text style={styles.analysisCtaSubtitle}>Taxas por 100 mil hab., comparativos e gráficos</Text>
+            </View>
+            <View style={styles.analysisCtaArrowWrap}>
+              <FontAwesome6 name="arrow-right" size={13} color="#fff" />
+            </View>
+          </LinearGradient>
+        </TouchableOpacity>
+
         {/* SELETOR DE CATEGORIAS VIA DROPDOWN ESTILIZADO */}
         {(() => {
           const activeOption = categoryOptions.find(opt => opt.id === selectedTab) || categoryOptions[0];
@@ -1120,7 +1129,7 @@ export default function Dados() {
           );
         })()}
 
-        {/* ================= 1. CARD: GERAL ================= */}
+        {/* ================= 1. CARD: GERAL (NÚMEROS BRUTOS) ================= */}
         {selectedTab === 'general' && (
           <LinearGradient
             colors={['#030514', '#0a1758', '#07268a']}
@@ -1155,9 +1164,7 @@ export default function Dados() {
                 <View style={[styles.legendDot, { backgroundColor: '#000', borderWidth: 1, borderColor: '#fff' }]} />
                 <Text style={styles.categorySummaryName}>Vida</Text>
                 <Text style={styles.categorySummaryValue}>{lifeCrimesStats.total}</Text>
-                <Text style={styles.categorySummaryPct}>
-                  {stats.total > 0 ? ((lifeCrimesStats.total / stats.total) * 100).toFixed(0) : 0}%
-                </Text>
+                <Text style={styles.categorySummarySub}>casos</Text>
               </TouchableOpacity>
 
               <TouchableOpacity
@@ -1168,9 +1175,7 @@ export default function Dados() {
                 <View style={[styles.legendDot, { backgroundColor: '#FF0000' }]} />
                 <Text style={styles.categorySummaryName}>Física</Text>
                 <Text style={styles.categorySummaryValue}>{physicalCrimesStats.total}</Text>
-                <Text style={styles.categorySummaryPct}>
-                  {stats.total > 0 ? ((physicalCrimesStats.total / stats.total) * 100).toFixed(0) : 0}%
-                </Text>
+                <Text style={styles.categorySummarySub}>casos</Text>
               </TouchableOpacity>
 
               <TouchableOpacity
@@ -1181,9 +1186,7 @@ export default function Dados() {
                 <View style={[styles.legendDot, { backgroundColor: '#9ca3af' }]} />
                 <Text style={styles.categorySummaryName}>Patrimônio</Text>
                 <Text style={styles.categorySummaryValue}>{patrimonyCrimesStats.total}</Text>
-                <Text style={styles.categorySummaryPct}>
-                  {stats.total > 0 ? ((patrimonyCrimesStats.total / stats.total) * 100).toFixed(0) : 0}%
-                </Text>
+                <Text style={styles.categorySummarySub}>casos</Text>
               </TouchableOpacity>
             </View>
 
@@ -1191,8 +1194,6 @@ export default function Dados() {
             <Text style={styles.sectionHeading}>Maiores Incidências no Município</Text>
             {stats.top3.map((crime, index) => {
               const icon = getCrimeIcon(crime.name);
-              const pct = stats.total > 0 ? ((crime.count / stats.total) * 100).toFixed(1) : '0';
-              const maxCount = stats.top3[0]?.count || 1;
               return (
                 <View key={index} style={styles.crimeRowCard}>
                   <View style={styles.rankBadge}>
@@ -1206,17 +1207,7 @@ export default function Dados() {
                       <Text style={styles.crimeName} numberOfLines={1}>
                         {formatCrimeName(crime.name)}
                       </Text>
-                      <Text style={styles.crimeCountValue}>
-                        {crime.count} <Text style={styles.crimePctSmall}>({pct}%)</Text>
-                      </Text>
-                    </View>
-                    <View style={styles.progressBarTrack}>
-                      <View
-                        style={[
-                          styles.progressBarFill,
-                          { width: `${Math.max((crime.count / maxCount) * 100, 3)}%`, backgroundColor: '#60a5fa' }
-                        ]}
-                      />
+                      <Text style={styles.crimeCountValue}>{crime.count} casos</Text>
                     </View>
                   </View>
                 </View>
@@ -1246,14 +1237,10 @@ export default function Dados() {
                 })}
               </>
             )}
-
-            {/* Gráfico Donut em Largura Total */}
-            <Text style={[styles.sectionHeading, { marginTop: 22 }]}>Distribuição das Principais Naturezas</Text>
-            {renderGeneralDonut()}
           </LinearGradient>
         )}
 
-        {/* ================= 2. CARD: CONTRA A VIDA ================= */}
+        {/* ================= 2. CARD: CONTRA A VIDA (NÚMEROS BRUTOS) ================= */}
         {selectedTab === 'life' && (
           <View style={[styles.card, { backgroundColor: '#111315', borderWidth: 1, borderColor: '#23272f' }]}>
             <View style={styles.cardHeader}>
@@ -1270,37 +1257,16 @@ export default function Dados() {
             <View style={styles.heroStatBox}>
               <Text style={styles.heroStatLabel}>Total Registrado</Text>
               <Text style={styles.heroStatNumber}>{lifeCrimesStats.total}</Text>
-              <Text style={styles.heroStatDescription}>
-                {stats.total > 0 ? ((lifeCrimesStats.total / stats.total) * 100).toFixed(1) : 0}% de todos os crimes do município
-              </Text>
+              <Text style={styles.heroStatDescription}>casos registrados na região</Text>
             </View>
 
-            {/* Proporção Visual no Município */}
-            {renderVolumeComparison(
-              'Contra a Vida',
-              lifeCrimesStats.total,
-              stats.total,
-              '#ffffff'
-            )}
-
-            {/* Lista Detalhada com Ícones e Barras */}
-            <Text style={[styles.sectionHeading, { marginTop: 20 }]}>Ocorrências Detalhadas</Text>
-            {renderCategoryCrimeList(lifeCrimesStats.data, lifeCrimesStats.total, '#ffffff')}
-
-            {/* Gráfico de Distribuição Interna Full-Width */}
-            <Text style={[styles.sectionHeading, { marginTop: 22 }]}>Composição da Categoria</Text>
-            {renderCategoryDonut(lifeCrimesStats, [
-              '#ffffff',
-              '#d1d5db',
-              '#9ca3af',
-              '#6b7280',
-              '#4b5563',
-              '#374151',
-            ])}
+            {/* Lista Detalhada com Ícones */}
+            <Text style={[styles.sectionHeading, { marginTop: 14 }]}>Ocorrências Registradas</Text>
+            {renderCategoryCrimeList(lifeCrimesStats.data)}
           </View>
         )}
 
-        {/* ================= 3. CARD: INTEGRIDADE FÍSICA ================= */}
+        {/* ================= 3. CARD: INTEGRIDADE FÍSICA (NÚMEROS BRUTOS) ================= */}
         {selectedTab === 'physical' && (
           <View style={[styles.card, { backgroundColor: '#180707', borderWidth: 1, borderColor: '#5c1010' }]}>
             <View style={styles.cardHeader}>
@@ -1317,36 +1283,16 @@ export default function Dados() {
             <View style={styles.heroStatBox}>
               <Text style={styles.heroStatLabel}>Total Registrado</Text>
               <Text style={[styles.heroStatNumber, { color: '#f87171' }]}>{physicalCrimesStats.total}</Text>
-              <Text style={styles.heroStatDescription}>
-                {stats.total > 0 ? ((physicalCrimesStats.total / stats.total) * 100).toFixed(1) : 0}% de todos os crimes do município
-              </Text>
+              <Text style={styles.heroStatDescription}>casos registrados na região</Text>
             </View>
 
-            {/* Proporção Visual no Município */}
-            {renderVolumeComparison(
-              'Integridade Física',
-              physicalCrimesStats.total,
-              stats.total,
-              '#ef4444'
-            )}
-
-            {/* Lista Detalhada com Ícones e Barras */}
-            <Text style={[styles.sectionHeading, { marginTop: 20 }]}>Ocorrências Detalhadas</Text>
-            {renderCategoryCrimeList(physicalCrimesStats.data, physicalCrimesStats.total, '#ef4444')}
-
-            {/* Gráfico de Distribuição Interna Full-Width */}
-            <Text style={[styles.sectionHeading, { marginTop: 22 }]}>Composição da Categoria</Text>
-            {renderCategoryDonut(physicalCrimesStats, [
-              '#ef4444',
-              '#f87171',
-              '#fca5a5',
-              '#fb7185',
-              '#fda4af',
-            ])}
+            {/* Lista Detalhada com Ícones */}
+            <Text style={[styles.sectionHeading, { marginTop: 14 }]}>Ocorrências Registradas</Text>
+            {renderCategoryCrimeList(physicalCrimesStats.data)}
           </View>
         )}
 
-        {/* ================= 4. CARD: PATRIMÔNIO ================= */}
+        {/* ================= 4. CARD: PATRIMÔNIO (NÚMEROS BRUTOS) ================= */}
         {selectedTab === 'patrimony' && (
           <View style={[styles.card, { backgroundColor: '#161922', borderWidth: 1, borderColor: '#2d3748' }]}>
             <View style={styles.cardHeader}>
@@ -1363,33 +1309,12 @@ export default function Dados() {
             <View style={styles.heroStatBox}>
               <Text style={styles.heroStatLabel}>Total Registrado</Text>
               <Text style={[styles.heroStatNumber, { color: '#94a3b8' }]}>{patrimonyCrimesStats.total}</Text>
-              <Text style={styles.heroStatDescription}>
-                {stats.total > 0 ? ((patrimonyCrimesStats.total / stats.total) * 100).toFixed(1) : 0}% de todos os crimes do município
-              </Text>
+              <Text style={styles.heroStatDescription}>casos registrados na região</Text>
             </View>
 
-            {/* Proporção Visual no Município */}
-            {renderVolumeComparison(
-              'Patrimônio',
-              patrimonyCrimesStats.total,
-              stats.total,
-              '#94a3b8'
-            )}
-
-            {/* Lista Detalhada com Ícones e Barras */}
-            <Text style={[styles.sectionHeading, { marginTop: 20 }]}>Ocorrências Detalhadas</Text>
-            {renderCategoryCrimeList(patrimonyCrimesStats.data, patrimonyCrimesStats.total, '#94a3b8')}
-
-            {/* Gráfico de Distribuição Interna Full-Width */}
-            <Text style={[styles.sectionHeading, { marginTop: 22 }]}>Composição da Categoria</Text>
-            {renderCategoryDonut(patrimonyCrimesStats, [
-              '#38bdf8',
-              '#818cf8',
-              '#fbbf24',
-              '#f97316',
-              '#a78bfa',
-              '#94a3b8',
-            ])}
+            {/* Lista Detalhada com Ícones */}
+            <Text style={[styles.sectionHeading, { marginTop: 14 }]}>Ocorrências Registradas</Text>
+            {renderCategoryCrimeList(patrimonyCrimesStats.data)}
           </View>
         )}
       </Animated.ScrollView>
@@ -2037,6 +1962,64 @@ const styles = StyleSheet.create({
     fontFamily: 'GlacialR',
     color: '#94a3b8',
     marginTop: 2,
+  },
+  categorySummarySub: {
+    fontSize: 11,
+    fontFamily: 'GlacialR',
+    color: 'rgba(255, 255, 255, 0.75)',
+    marginTop: 2,
+  },
+
+  /* ================= BOTÃO CTA: VER ANÁLISE APURADA ================= */
+  analysisCtaButton: {
+    marginHorizontal: 16,
+    marginTop: 2,
+    marginBottom: 12,
+    borderRadius: 16,
+    overflow: 'hidden',
+    elevation: 4,
+    shadowColor: '#1c1f75',
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 3 },
+  },
+  analysisCtaGradient: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 13,
+    paddingHorizontal: 16,
+  },
+  analysisCtaIconWrap: {
+    width: 36,
+    height: 36,
+    borderRadius: 12,
+    backgroundColor: 'rgba(255, 255, 255, 0.16)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  analysisCtaTextWrap: {
+    flex: 1,
+  },
+  analysisCtaTitle: {
+    color: '#ffffff',
+    fontSize: 15,
+    fontFamily: 'texgyB',
+  },
+  analysisCtaSubtitle: {
+    color: '#bfdbfe',
+    fontSize: 11,
+    fontFamily: 'GlacialR',
+    marginTop: 1,
+  },
+  analysisCtaArrowWrap: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: 8,
   },
 
   /* ================= LISTAGEM TOP 3 (GERAL) ================= */

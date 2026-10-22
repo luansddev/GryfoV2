@@ -11,6 +11,7 @@ import {
   Dimensions,
   ActivityIndicator,
   useWindowDimensions,
+  LayoutAnimation,
 } from 'react-native';
 import * as Location from 'expo-location';
 import { normalizarCidade } from '../context/Normalizer';
@@ -28,7 +29,13 @@ import Animated, {
 } from 'react-native-reanimated';
 import { useSearchLocation } from '../context/SearchLocationContext';
 import { useCrimeAnalysis } from '../hooks/useCrimeAnalysis';
-import { getCrimeIcon } from '../constants/CrimeData';
+import {
+  getCrimeIcon,
+  formatCrimeName,
+  lifeCrimesKeys,
+  physicalCrimesKeys,
+  patrimonyCrimesKeys,
+} from '../constants/CrimeData';
 import { AnalysisResult, CrimeCategory } from '../services/analytics/types';
 import CitySearchBar from '../components/analysis/CitySearchBar';
 import { AnimatedBar, DonutChart, CompareRow, PositionGauge } from '../components/analysis/Charts';
@@ -550,6 +557,505 @@ function VigiaCta({ analysis }: { analysis: AnalysisResult }) {
 }
 
 /* ================================================================== */
+/* Filtro de Crimes e Visão de Crime Específico                        */
+/* ================================================================== */
+
+type FilterSelection =
+  | { type: 'general' }
+  | { type: 'specific'; category: CrimeCategory; crimeKey: string };
+
+const NATURE_LIST: { id: CrimeCategory; label: string; icon: string; color: string; keys: string[] }[] = [
+  { id: 'patrimony', label: 'Patrimônio', icon: 'building-shield', color: '#64748b', keys: patrimonyCrimesKeys },
+  { id: 'physical', label: 'Integridade Física', icon: 'person-falling-burst', color: '#dc2626', keys: physicalCrimesKeys },
+  { id: 'life', label: 'Contra a Vida', icon: 'skull-crossbones', color: '#000000', keys: lifeCrimesKeys },
+];
+
+function CrimeFilterCard({
+  selectedFilter,
+  onSelectFilter,
+  rawCrimes,
+}: {
+  selectedFilter: FilterSelection;
+  onSelectFilter: (filter: FilterSelection) => void;
+  rawCrimes?: Record<string, number>;
+}) {
+  const [isExpanded, setIsExpanded] = useState(false);
+  const [activeCategoryTab, setActiveCategoryTab] = useState<CrimeCategory>(
+    selectedFilter.type === 'specific' ? selectedFilter.category : 'patrimony'
+  );
+
+  const currentCategoryObj = selectedFilter.type === 'specific'
+    ? NATURE_LIST.find(n => n.id === selectedFilter.category)
+    : null;
+
+  const currentIcon = selectedFilter.type === 'general'
+    ? { icon: 'layer-group', color: '#1c1f75' }
+    : getCrimeIcon(selectedFilter.crimeKey);
+
+  const toggleExpand = () => {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setIsExpanded(prev => !prev);
+  };
+
+  const handleSelectGeneral = () => {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    onSelectFilter({ type: 'general' });
+    setIsExpanded(false);
+  };
+
+  const handleSelectCrime = (category: CrimeCategory, crimeKey: string) => {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    onSelectFilter({ type: 'specific', category, crimeKey });
+    setIsExpanded(false);
+  };
+
+  return (
+    <Animated.View entering={FadeInDown.duration(400)} style={styles.filterCardShadow}>
+      <View style={styles.filterCard}>
+        {/* Cabeçalho do Card longo horizontal */}
+        <TouchableOpacity
+          style={styles.filterCardHeader}
+          onPress={toggleExpand}
+          activeOpacity={0.8}
+        >
+          <View style={[styles.filterIconCircle, { backgroundColor: selectedFilter.type === 'general' ? '#e0e7ff' : `${currentIcon.color}15` }]}>
+            <FontAwesome6 name={currentIcon.icon as any} size={15} color={currentIcon.color} />
+          </View>
+
+          <View style={{ flex: 1, paddingRight: 8 }}>
+            <Text style={styles.filterEyebrow}>
+              {selectedFilter.type === 'general' ? 'Filtro de ocorrências' : `Filtrado por: ${currentCategoryObj?.label}`}
+            </Text>
+            <Text style={styles.filterCurrentTitle} numberOfLines={1}>
+              {selectedFilter.type === 'general' ? 'Visão Geral (Todas)' : formatCrimeName(selectedFilter.crimeKey)}
+            </Text>
+          </View>
+
+          <View style={styles.filterHeaderActions}>
+            {selectedFilter.type === 'specific' && (
+              <TouchableOpacity
+                style={styles.filterClearBtn}
+                onPress={(e) => {
+                  e.stopPropagation();
+                  handleSelectGeneral();
+                }}
+                activeOpacity={0.7}
+              >
+                <FontAwesome6 name="arrow-rotate-left" size={10} color="#3331ff" style={{ marginRight: 4 }} />
+                <Text style={styles.filterClearText}>Geral</Text>
+              </TouchableOpacity>
+            )}
+            <View style={[styles.filterChevronCircle, isExpanded && styles.filterChevronRotated]}>
+              <FontAwesome6 name={isExpanded ? 'chevron-up' : 'chevron-down'} size={12} color="#475569" />
+            </View>
+          </View>
+        </TouchableOpacity>
+
+        {/* Área expandida de seleção */}
+        {isExpanded && (
+          <View style={styles.filterExpandArea}>
+            <View style={styles.filterDivider} />
+
+            {/* Abas de Natureza + Visão Geral */}
+            <Text style={styles.filterSectionTitle}>Escolha a natureza ou volte à visão geral:</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterTabsRow}>
+              <TouchableOpacity
+                style={[styles.filterTabPill, selectedFilter.type === 'general' && styles.filterTabPillActive]}
+                onPress={handleSelectGeneral}
+                activeOpacity={0.75}
+              >
+                <FontAwesome6 name="layer-group" size={12} color={selectedFilter.type === 'general' ? '#fff' : '#1c1f75'} />
+                <Text style={[styles.filterTabPillText, selectedFilter.type === 'general' && styles.filterTabPillTextActive]}>
+                  Visão Geral
+                </Text>
+              </TouchableOpacity>
+
+              {NATURE_LIST.map(nature => {
+                const isSelected = selectedFilter.type === 'specific' && selectedFilter.category === nature.id;
+                const isBrowsed = activeCategoryTab === nature.id;
+                return (
+                  <TouchableOpacity
+                    key={nature.id}
+                    style={[
+                      styles.filterTabPill,
+                      isBrowsed && { borderColor: nature.color, backgroundColor: `${nature.color}12` },
+                      isSelected && { backgroundColor: nature.color }
+                    ]}
+                    onPress={() => {
+                      LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+                      setActiveCategoryTab(nature.id);
+                    }}
+                    activeOpacity={0.75}
+                  >
+                    <FontAwesome6
+                      name={nature.icon as any}
+                      size={12}
+                      color={isSelected ? '#fff' : isBrowsed ? nature.color : '#64748b'}
+                    />
+                    <Text
+                      style={[
+                        styles.filterTabPillText,
+                        isBrowsed && { color: nature.color, fontFamily: 'texgyB' },
+                        isSelected && { color: '#fff' }
+                      ]}
+                    >
+                      {nature.label}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+
+            {/* Lista de crimes específicos da categoria ativa */}
+            <Text style={styles.filterSectionTitle}>Selecione um crime específico para analisar:</Text>
+            <View style={styles.filterCrimesGrid}>
+              {NATURE_LIST.find(n => n.id === activeCategoryTab)?.keys.map(crimeKey => {
+                const isSelected = selectedFilter.type === 'specific' && selectedFilter.crimeKey === crimeKey;
+                const crimeIcon = getCrimeIcon(crimeKey);
+                const count = rawCrimes ? (rawCrimes[crimeKey] ?? 0) : undefined;
+                return (
+                  <TouchableOpacity
+                    key={crimeKey}
+                    style={[
+                      styles.filterCrimeChip,
+                      isSelected && styles.filterCrimeChipActive
+                    ]}
+                    onPress={() => handleSelectCrime(activeCategoryTab, crimeKey)}
+                    activeOpacity={0.7}
+                  >
+                    <View style={[styles.filterCrimeChipIcon, { backgroundColor: isSelected ? '#ffffff24' : `${crimeIcon.color}15` }]}>
+                      <FontAwesome6 name={crimeIcon.icon as any} size={11} color={isSelected ? '#fff' : crimeIcon.color} />
+                    </View>
+                    <Text
+                      style={[styles.filterCrimeChipText, isSelected && styles.filterCrimeChipTextActive]}
+                      numberOfLines={1}
+                    >
+                      {formatCrimeName(crimeKey)}
+                    </Text>
+                    {count !== undefined && (
+                      <View style={[styles.filterCrimeChipBadge, isSelected && styles.filterCrimeChipBadgeActive]}>
+                        <Text style={[styles.filterCrimeChipBadgeText, isSelected && styles.filterCrimeChipBadgeTextActive]}>
+                          {count}
+                        </Text>
+                      </View>
+                    )}
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </View>
+        )}
+      </View>
+    </Animated.View>
+  );
+}
+
+function SpecificCrimeView({
+  analysis,
+  crimeKey,
+  category,
+  onResetToGeneral,
+}: {
+  analysis: AnalysisResult;
+  crimeKey: string;
+  category: CrimeCategory;
+  onResetToGeneral: () => void;
+}) {
+  const router = useRouter();
+  const crimeName = formatCrimeName(crimeKey);
+  const catMeta = CATEGORY_META[category];
+  const crimeIcon = getCrimeIcon(crimeKey);
+  const count = analysis.rawCrimes?.[crimeKey] ?? 0;
+  const totalCity = analysis.totalOccurrences;
+  const cityPct = totalCity > 0 ? (count / totalCity) * 100 : 0;
+
+  const categoryMetric = analysis.categories.find(c => c.id === category);
+  const catTotal = categoryMetric?.total ?? 0;
+  const catPct = catTotal > 0 ? (count / catTotal) * 100 : 0;
+
+  const population = analysis.population;
+  const ratePer100k = population && population > 0 ? (count / population) * 100000 : undefined;
+  const stateTotal = analysis.stateCrimeTotals?.[crimeKey];
+
+  // Ranking do crime no município
+  let rankOnCity: number | null = null;
+  if (analysis.rawCrimes) {
+    const sorted = Object.entries(analysis.rawCrimes).sort((a, b) => b[1] - a[1]);
+    const idx = sorted.findIndex(item => item[0] === crimeKey);
+    if (idx >= 0) rankOnCity = idx + 1;
+  }
+
+  // Histórico mensal do crime específico
+  const trendPoints = (analysis.monthlyCrimes ?? [])
+    .map(m => ({
+      year: m.year,
+      month: m.month,
+      total: m.crimes[crimeKey] ?? 0,
+    }))
+    .filter(p => p.total !== undefined);
+
+  const hasTrend = trendPoints.length >= 2;
+  const lastChange = hasTrend
+    ? trendPoints[trendPoints.length - 1].total - trendPoints[trendPoints.length - 2].total
+    : null;
+
+  return (
+    <>
+      {/* Hero do Crime Específico */}
+      <Animated.View entering={FadeInDown.duration(450)} style={styles.heroShadow}>
+        <View style={[styles.crimeHeroCard, { borderColor: `${crimeIcon.color}33` }]}>
+          <LinearGradient
+            colors={['#0f172a', '#1e293b']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.crimeHeroGradient}
+          >
+            {/* Header com badge da categoria e botão voltar */}
+            <View style={styles.crimeHeroHeaderRow}>
+              <View style={[styles.crimeCategoryPill, { backgroundColor: `${catMeta.color}24`, borderColor: `${catMeta.color}40` }]}>
+                <FontAwesome6 name={catMeta.icon as any} size={11} color={catMeta.color} />
+                <Text style={[styles.crimeCategoryPillText, { color: catMeta.color }]}>{catMeta.label}</Text>
+              </View>
+
+              <TouchableOpacity
+                style={styles.crimeHeroResetBtn}
+                onPress={onResetToGeneral}
+                activeOpacity={0.7}
+              >
+                <FontAwesome6 name="layer-group" size={11} color="#94a3b8" />
+                <Text style={styles.crimeHeroResetText}>Visão geral</Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* Ícone e Nome do Crime */}
+            <View style={styles.crimeHeroTitleSection}>
+              <View style={[styles.crimeHeroIconBox, { backgroundColor: `${crimeIcon.color}22` }]}>
+                <FontAwesome6 name={crimeIcon.icon as any} size={24} color={crimeIcon.color} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.crimeHeroTitle}>{crimeName}</Text>
+                <Text style={styles.crimeHeroSubtitle}>
+                  {analysis.displayName || analysis.city} • Dados oficiais SSP-SP
+                </Text>
+              </View>
+            </View>
+
+            {/* Números em Destaque */}
+            <View style={styles.crimeHeroStatsRow}>
+              <View style={styles.crimeHeroStatBox}>
+                <Text style={styles.crimeHeroStatNumber}>{fmtInt(count)}</Text>
+                <Text style={styles.crimeHeroStatLabel}>ocorrências registradas</Text>
+              </View>
+
+              {ratePer100k !== undefined && (
+                <>
+                  <View style={styles.crimeHeroStatDivider} />
+                  <View style={styles.crimeHeroStatBox}>
+                    <Text style={styles.crimeHeroStatNumber}>{fmtRate(ratePer100k)}</Text>
+                    <Text style={styles.crimeHeroStatLabel}>a cada 100 mil hab.</Text>
+                  </View>
+                </>
+              )}
+            </View>
+          </LinearGradient>
+        </View>
+      </Animated.View>
+
+      {/* Card: Detalhes e Representatividade */}
+      <Card
+        title="Destaques e Proporção"
+        subtitle={`Como ${crimeName} se comporta no município`}
+        icon="chart-pie"
+        delay={80}
+      >
+        <View style={{ gap: 14 }}>
+          {/* Item 1: Proporção na categoria */}
+          <View style={styles.specificMetricRow}>
+            <View style={[styles.summaryIcon, { backgroundColor: `${catMeta.color}15` }]}>
+              <FontAwesome6 name="chart-pie" size={13} color={catMeta.color} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.summaryText}>
+                Representa <Text style={styles.bold}>{catPct < 1 && catPct > 0 ? '<1' : fmtInt(catPct)}%</Text> de todos os crimes de {catMeta.label} ({fmtInt(catTotal)} casos).
+              </Text>
+              <View style={{ marginTop: 8 }}>
+                <AnimatedBar pct={Math.min(catPct, 100)} color={catMeta.color} height={7} />
+              </View>
+            </View>
+          </View>
+
+          {/* Item 2: Proporção no total do município */}
+          <View style={styles.specificMetricRow}>
+            <View style={[styles.summaryIcon, { backgroundColor: '#3331ff15' }]}>
+              <FontAwesome6 name="city" size={13} color="#3331ff" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.summaryText}>
+                Corresponde a <Text style={styles.bold}>{cityPct < 1 && cityPct > 0 ? '<1' : fmtInt(cityPct)}%</Text> do total geral de ocorrências da cidade ({fmtInt(totalCity)} registros).
+              </Text>
+              <View style={{ marginTop: 8 }}>
+                <AnimatedBar pct={Math.min(cityPct, 100)} color="#3331ff" height={7} />
+              </View>
+            </View>
+          </View>
+
+          {/* Item 3: Ranking na cidade */}
+          {rankOnCity !== null && (
+            <View style={styles.specificMetricRow}>
+              <View style={[styles.summaryIcon, { backgroundColor: '#f59e0b15' }]}>
+                <FontAwesome6 name="ranking-star" size={13} color="#f59e0b" />
+              </View>
+              <Text style={styles.summaryText}>
+                Ocupa a <Text style={styles.bold}>{rankOnCity}ª posição</Text> entre os tipos de crimes registrados no município.
+              </Text>
+            </View>
+          )}
+
+          {/* Item 4: Total no Estado de SP */}
+          {stateTotal !== undefined && (
+            <View style={styles.specificMetricRow}>
+              <View style={[styles.summaryIcon, { backgroundColor: '#64748b15' }]}>
+                <FontAwesome6 name="map" size={13} color="#64748b" />
+              </View>
+              <Text style={styles.summaryText}>
+                No estado de São Paulo foram registrados <Text style={styles.bold}>{fmtInt(stateTotal)} casos</Text> desta mesma ocorrência no período.
+              </Text>
+            </View>
+          )}
+        </View>
+      </Card>
+
+      {/* Card: Evolução Temporal */}
+      {hasTrend ? (
+        <Card
+          title="Evolução mês a mês"
+          subtitle={`Histórico de registros de ${crimeName}`}
+          icon="chart-line"
+          delay={160}
+        >
+          <LineChart
+            data={{
+              labels: trendPoints.map(p => fmtPeriodShort(p.month, p.year)),
+              datasets: [{
+                data: trendPoints.map(p => p.total),
+                color: (o = 1) => `${crimeIcon.color}`,
+                strokeWidth: 3,
+              }],
+            }}
+            width={SCREEN_WIDTH - 72}
+            height={190}
+            withInnerLines={false}
+            chartConfig={{
+              backgroundGradientFrom: '#ffffff',
+              backgroundGradientTo: '#ffffff',
+              decimalPlaces: 0,
+              color: (o = 1) => `${crimeIcon.color}`,
+              labelColor: (o = 1) => `rgba(100, 116, 139, ${o})`,
+              propsForDots: { r: '4', strokeWidth: '2', stroke: '#fff' },
+            }}
+            bezier
+            style={{ marginLeft: -12 }}
+          />
+          {lastChange !== null && (
+            <View style={styles.trendPill}>
+              <FontAwesome6
+                name={lastChange > 0 ? 'arrow-trend-up' : lastChange < 0 ? 'arrow-trend-down' : 'minus'}
+                size={13}
+                color={lastChange > 0 ? '#dc2626' : lastChange < 0 ? '#16a34a' : '#64748b'}
+              />
+              <Text style={styles.trendText}>
+                {lastChange > 0 ? `+${lastChange} casos em relação ao mês anterior` : lastChange < 0 ? `${lastChange} casos em relação ao mês anterior` : 'Estável em relação ao mês anterior'}
+              </Text>
+            </View>
+          )}
+        </Card>
+      ) : null}
+
+      {/* Card: Orientações de Prevenção */}
+      <Card
+        title="Orientações e Prevenção"
+        subtitle={`Recomendações de segurança para ${catMeta.label}`}
+        icon="shield-halved"
+        delay={240}
+      >
+        <View style={{ gap: 12 }}>
+          {category === 'patrimony' ? (
+            <>
+              <View style={styles.tipRow}>
+                <FontAwesome6 name="check" size={13} color="#16a34a" style={{ marginTop: 2 }} />
+                <Text style={styles.tipText}>
+                  Evite deixar bolsas, mochilas ou objetos visíveis dentro de veículos estacionados.
+                </Text>
+              </View>
+              <View style={styles.tipRow}>
+                <FontAwesome6 name="check" size={13} color="#16a34a" style={{ marginTop: 2 }} />
+                <Text style={styles.tipText}>
+                  Prefira estacionar em vias bem iluminadas ou locais com vigilância ativa.
+                </Text>
+              </View>
+              <View style={styles.tipRow}>
+                <FontAwesome6 name="check" size={13} color="#16a34a" style={{ marginTop: 2 }} />
+                <Text style={styles.tipText}>
+                  Ao notar movimentação suspeita, comunique imediatamente a Polícia Militar pelo 190.
+                </Text>
+              </View>
+            </>
+          ) : category === 'physical' ? (
+            <>
+              <View style={styles.tipRow}>
+                <FontAwesome6 name="check" size={13} color="#16a34a" style={{ marginTop: 2 }} />
+                <Text style={styles.tipText}>
+                  Em situações de emergência ou agressão, acione o 190 ou dirija-se a uma delegacia.
+                </Text>
+              </View>
+              <View style={styles.tipRow}>
+                <FontAwesome6 name="check" size={13} color="#16a34a" style={{ marginTop: 2 }} />
+                <Text style={styles.tipText}>
+                  Para casos de violência contra a mulher, utilize a Central de Atendimento Disque 180.
+                </Text>
+              </View>
+            </>
+          ) : (
+            <>
+              <View style={styles.tipRow}>
+                <FontAwesome6 name="check" size={13} color="#16a34a" style={{ marginTop: 2 }} />
+                <Text style={styles.tipText}>
+                  Denúncias anônimas sobre crimes contra a vida podem ser feitas via Disque Denúncia 181.
+                </Text>
+              </View>
+              <View style={styles.tipRow}>
+                <FontAwesome6 name="check" size={13} color="#16a34a" style={{ marginTop: 2 }} />
+                <Text style={styles.tipText}>
+                  Em casos imediatos de risco à vida, ligue 190 imediatamente.
+                </Text>
+              </View>
+            </>
+          )}
+        </View>
+      </Card>
+
+      {/* CTA de Vigia focado */}
+      <Animated.View entering={FadeInDown.delay(300).duration(450)} style={styles.ctaCard}>
+        <View style={[styles.ctaIcon, { backgroundColor: `${crimeIcon.color}15` }]}>
+          <FontAwesome6 name="eye" size={18} color={crimeIcon.color} />
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.ctaTitle} numberOfLines={2}>Fique em alerta em {analysis.displayName || analysis.city}</Text>
+          <Text style={styles.ctaText}>Crie um Vigia e receba alertas da comunidade em tempo real.</Text>
+        </View>
+        <TouchableOpacity
+          style={[styles.ctaButton, { backgroundColor: crimeIcon.color === '#000000' ? '#1c1f75' : crimeIcon.color }]}
+          activeOpacity={0.85}
+          onPress={() => router.push({ pathname: '/home', params: { switchTab: 'locais' } })}
+        >
+          <FontAwesome6 name="arrow-right" size={14} color="#fff" />
+        </TouchableOpacity>
+      </Animated.View>
+    </>
+  );
+}
+
+/* ================================================================== */
 /* Tela                                                                */
 /* ================================================================== */
 
@@ -560,6 +1066,12 @@ export default function Analise() {
   const { analysis, loading, error, refresh } = useCrimeAnalysis(activeCity);
   const [refreshing, setRefreshing] = useState(false);
   const [locationLoading, setLocationLoading] = useState(!userCity && !searchMode);
+  const [selectedFilter, setSelectedFilter] = useState<FilterSelection>({ type: 'general' });
+
+  // Resetar para visão geral ao trocar de cidade
+  useEffect(() => {
+    setSelectedFilter({ type: 'general' });
+  }, [activeCity]);
 
   // Garante a busca da localização do usuário caso ainda não esteja disponível
   useEffect(() => {
@@ -691,14 +1203,35 @@ export default function Analise() {
         onScrollBeginDrag={Keyboard.dismiss}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#1c1f75" />}
       >
-        <Hero analysis={analysis} />
-        <Summary analysis={analysis} />
-        <StatePosition analysis={analysis} />
-        <Breakdown analysis={analysis} />
-        <CategoryComparison analysis={analysis} />
-        <TopCrimes analysis={analysis} />
-        <Trend analysis={analysis} />
-        <VigiaCta analysis={analysis} />
+        {/* Filtro de Crimes no topo (Card longo horizontal) */}
+        <CrimeFilterCard
+          selectedFilter={selectedFilter}
+          onSelectFilter={setSelectedFilter}
+          rawCrimes={analysis.rawCrimes}
+        />
+
+        {selectedFilter.type === 'general' ? (
+          <>
+            <Hero analysis={analysis} />
+            <Summary analysis={analysis} />
+            <StatePosition analysis={analysis} />
+            <Breakdown analysis={analysis} />
+            <CategoryComparison analysis={analysis} />
+            <TopCrimes analysis={analysis} />
+            <Trend analysis={analysis} />
+            <VigiaCta analysis={analysis} />
+          </>
+        ) : (
+          <SpecificCrimeView
+            analysis={analysis}
+            crimeKey={selectedFilter.crimeKey}
+            category={selectedFilter.category}
+            onResetToGeneral={() => {
+              LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+              setSelectedFilter({ type: 'general' });
+            }}
+          />
+        )}
 
         <Text style={styles.sources}>
           Fontes: SSP-SP ({fmtPeriodLong(analysis.dataQuality.lastPeriod)})
@@ -850,4 +1383,288 @@ const styles = StyleSheet.create({
   stateText: { fontFamily: 'texgyR', fontSize: 14, color: '#64748b', textAlign: 'center', lineHeight: 21, marginTop: 8 },
   stateButton: { marginTop: 20, backgroundColor: '#000', paddingHorizontal: 22, paddingVertical: 12, borderRadius: 22 },
   stateButtonText: { fontFamily: 'texgyB', fontSize: 14, color: '#fff' },
+
+  /* Filtro de Crimes */
+  filterCardShadow: {
+    marginBottom: 16,
+    shadowColor: '#1c1f75',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 3,
+  },
+  filterCard: {
+    backgroundColor: '#fff',
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    overflow: 'hidden',
+  },
+  filterCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    gap: 12,
+  },
+  filterIconCircle: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  filterEyebrow: {
+    fontFamily: 'texgyR',
+    fontSize: 11,
+    color: '#64748b',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  filterCurrentTitle: {
+    fontFamily: 'texgyB',
+    fontSize: 16,
+    color: '#0f172a',
+    marginTop: 2,
+  },
+  filterHeaderActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  filterClearBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#eef2ff',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 12,
+  },
+  filterClearText: {
+    fontFamily: 'texgyB',
+    fontSize: 11,
+    color: '#3331ff',
+  },
+  filterChevronCircle: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: '#f1f5f9',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  filterChevronRotated: {
+    backgroundColor: '#e2e8f0',
+  },
+  filterExpandArea: {
+    paddingHorizontal: 16,
+    paddingBottom: 16,
+  },
+  filterDivider: {
+    height: 1,
+    backgroundColor: '#f1f5f9',
+    marginBottom: 14,
+  },
+  filterSectionTitle: {
+    fontFamily: 'texgyB',
+    fontSize: 12,
+    color: '#475569',
+    marginBottom: 10,
+  },
+  filterTabsRow: {
+    gap: 8,
+    paddingBottom: 12,
+  },
+  filterTabPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 14,
+    backgroundColor: '#f8fafc',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
+  filterTabPillActive: {
+    backgroundColor: '#1c1f75',
+    borderColor: '#1c1f75',
+  },
+  filterTabPillText: {
+    fontFamily: 'texgyR',
+    fontSize: 12,
+    color: '#475569',
+  },
+  filterTabPillTextActive: {
+    color: '#fff',
+    fontFamily: 'texgyB',
+  },
+  filterCrimesGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  filterCrimeChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f8fafc',
+    borderRadius: 14,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    maxWidth: '100%',
+  },
+  filterCrimeChipActive: {
+    backgroundColor: '#1c1f75',
+    borderColor: '#1c1f75',
+  },
+  filterCrimeChipIcon: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 6,
+  },
+  filterCrimeChipText: {
+    fontFamily: 'texgyR',
+    fontSize: 12,
+    color: '#334155',
+    flexShrink: 1,
+  },
+  filterCrimeChipTextActive: {
+    color: '#fff',
+    fontFamily: 'texgyB',
+  },
+  filterCrimeChipBadge: {
+    marginLeft: 6,
+    backgroundColor: '#e2e8f0',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 8,
+  },
+  filterCrimeChipBadgeActive: {
+    backgroundColor: 'rgba(255,255,255,0.25)',
+  },
+  filterCrimeChipBadgeText: {
+    fontFamily: 'texgyB',
+    fontSize: 10,
+    color: '#475569',
+  },
+  filterCrimeChipBadgeTextActive: {
+    color: '#fff',
+  },
+
+  /* Specific Crime View */
+  crimeHeroCard: {
+    borderRadius: 24,
+    overflow: 'hidden',
+    borderWidth: 1,
+  },
+  crimeHeroGradient: {
+    padding: 20,
+  },
+  crimeHeroHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 16,
+  },
+  crimeCategoryPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  crimeCategoryPillText: {
+    fontFamily: 'texgyB',
+    fontSize: 11,
+  },
+  crimeHeroResetBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 12,
+  },
+  crimeHeroResetText: {
+    fontFamily: 'texgyR',
+    fontSize: 11,
+    color: '#cbd5e1',
+  },
+  crimeHeroTitleSection: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    marginBottom: 20,
+  },
+  crimeHeroIconBox: {
+    width: 52,
+    height: 52,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  crimeHeroTitle: {
+    fontFamily: 'texgyB',
+    fontSize: 22,
+    color: '#fff',
+  },
+  crimeHeroSubtitle: {
+    fontFamily: 'texgyR',
+    fontSize: 12,
+    color: '#94a3b8',
+    marginTop: 2,
+  },
+  crimeHeroStatsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    borderRadius: 16,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+  },
+  crimeHeroStatBox: {
+    flex: 1,
+  },
+  crimeHeroStatNumber: {
+    fontFamily: 'texgyB',
+    fontSize: 24,
+    color: '#fff',
+  },
+  crimeHeroStatLabel: {
+    fontFamily: 'texgyR',
+    fontSize: 11,
+    color: '#94a3b8',
+    marginTop: 2,
+  },
+  crimeHeroStatDivider: {
+    width: 1,
+    height: 32,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    marginHorizontal: 12,
+  },
+  specificMetricRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 12,
+  },
+  tipRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+  },
+  tipText: {
+    flex: 1,
+    fontFamily: 'texgyR',
+    fontSize: 13.5,
+    color: '#334155',
+    lineHeight: 19,
+  },
 });

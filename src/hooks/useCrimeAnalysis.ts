@@ -112,6 +112,52 @@ export const useCrimeAnalysis = (normalizedCity: string | null) => {
 
       const trend = analyzeTrend(monthlyTotals);
 
+      // Raw crimes e histórico por crime
+      const rawCrimes: Record<string, number> = {};
+      if (currentData) {
+        Object.keys(currentData).forEach(key => {
+          const locs = currentData[key]?.localizacoes;
+          const count = typeof currentData[key]?.quantidade === 'number'
+            ? currentData[key].quantidade
+            : Array.isArray(locs) ? locs.length : 0;
+          rawCrimes[key] = count;
+        });
+      }
+
+      const monthlyCrimes = cityHistory.map(h => {
+        const crimes: Record<string, number> = {};
+        if (h.data) {
+          Object.keys(h.data).forEach(key => {
+            const locs = h.data[key]?.localizacoes;
+            crimes[key] = typeof h.data[key]?.quantidade === 'number'
+              ? h.data[key].quantidade
+              : Array.isArray(locs) ? locs.length : 0;
+          });
+        }
+        return {
+          year: h.year,
+          month: h.month,
+          crimes,
+          total: calculateTotalOccurrences(h.data)
+        };
+      });
+
+      const stateCrimeTotals: Record<string, number> = {};
+      if (periodAll) {
+        Object.keys(periodAll).forEach(cKey => {
+          const cData = periodAll[cKey];
+          if (cData) {
+            Object.keys(cData).forEach(crimeKey => {
+              const locs = cData[crimeKey]?.localizacoes;
+              const count = typeof cData[crimeKey]?.quantidade === 'number'
+                ? cData[crimeKey].quantidade
+                : Array.isArray(locs) ? locs.length : 0;
+              stateCrimeTotals[crimeKey] = (stateCrimeTotals[crimeKey] || 0) + count;
+            });
+          }
+        });
+      }
+
       // 4. Data Quality
       const firstMonth = cityHistory[0].month.toString().padStart(2, '0');
       const lastMonth = currentPeriod.month.toString().padStart(2, '0');
@@ -138,7 +184,10 @@ export const useCrimeAnalysis = (normalizedCity: string | null) => {
         topCrimes,
         benchmark,
         trend,
-        dataQuality
+        dataQuality,
+        rawCrimes,
+        monthlyCrimes,
+        stateCrimeTotals,
       };
 
       // 5. Generate Insights and Recommendations

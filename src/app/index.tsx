@@ -104,27 +104,18 @@ export default function Index() {
 
                         <View style={styles.buttonGroup}>
                             <TouchableOpacity
-                                style={styles.btnPrimary}
-                                onPress={navegarCad}
-                                activeOpacity={0.8}
-                            >
-                                <FontAwesome6 name="user-plus" size={16} color="#fff" style={styles.btnIcon} />
-                                <Text style={styles.btnPrimaryText} numberOfLines={1}>Crie uma conta</Text>
-                            </TouchableOpacity>
-
-                            <View style={styles.dividerRow}>
-                                <View style={styles.dividerLine} />
-                                <Text style={styles.dividerText}>ou</Text>
-                                <View style={styles.dividerLine} />
-                            </View>
-
-                            <TouchableOpacity
                                 style={styles.btnSecondary}
                                 onPress={navegarLog}
                                 activeOpacity={0.8}
                             >
-                                <FontAwesome6 name="right-to-bracket" size={16} color="#fff" style={styles.btnIcon} />
+                                <FontAwesome6 name="right-to-bracket" size={16} color="#fff" style={styles.btnSecondaryIcon} />
                                 <Text style={styles.btnSecondaryText} numberOfLines={1}>Entrar</Text>
+                            </TouchableOpacity>
+
+                            <TouchableOpacity onPress={navegarCad} style={styles.switchLink} activeOpacity={0.7}>
+                                <Text style={styles.switchLinkText}>
+                                    Não possui conta? <Text style={styles.switchLinkBold}>Crie uma</Text>
+                                </Text>
                             </TouchableOpacity>
                         </View>
                     </Animated.View>
@@ -174,42 +165,6 @@ const styles = StyleSheet.create({
         width: "100%",
         gap: 0,
     },
-    btnPrimary: {
-        width: "100%",
-        backgroundColor: "rgba(255,255,255,0.15)",
-        borderWidth: 1,
-        borderColor: "rgba(255,255,255,0.3)",
-        height: 52,
-        borderRadius: 14,
-        justifyContent: "center",
-        alignItems: "center",
-        flexDirection: "row",
-        paddingHorizontal: 16,
-        gap: 10,
-    },
-    btnPrimaryText: {
-        color: "#fff",
-        fontFamily: "texgyR",
-        fontSize: 16,
-        includeFontPadding: false,
-    },
-    dividerRow: {
-        flexDirection: "row",
-        justifyContent: "center",
-        alignItems: "center",
-        marginVertical: 14,
-        gap: 12,
-    },
-    dividerLine: {
-        flex: 1,
-        height: 1,
-        backgroundColor: "rgba(255,255,255,0.2)",
-    },
-    dividerText: {
-        fontFamily: "GlacialR",
-        fontSize: 15,
-        color: "rgba(255,255,255,0.5)",
-    },
     btnSecondary: {
         width: "100%",
         backgroundColor: "#2563eb",
@@ -227,7 +182,20 @@ const styles = StyleSheet.create({
         fontSize: 16,
         includeFontPadding: false,
     },
-    btnIcon: {
-        transform: [{ translateY: 1 }],
+    btnSecondaryIcon: {
+        transform: [{ translateY: 1.5 }],
+    },
+    switchLink: {
+        alignItems: "center",
+        marginTop: 20,
+    },
+    switchLinkText: {
+        color: "rgba(255,255,255,0.5)",
+        fontFamily: "GlacialR",
+        fontSize: 15,
+    },
+    switchLinkBold: {
+        color: "#fff",
+        fontFamily: "texgyB",
     },
 });
