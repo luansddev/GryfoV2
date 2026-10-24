@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, TouchableOpacity, Alert, StyleSheet, Modal } from 'react-native';
 import { FontAwesome6 } from '@expo/vector-icons';
 import Animated, { FadeInUp, FadeOut, LinearTransition } from 'react-native-reanimated';
@@ -12,8 +12,29 @@ interface RascunhoItemProps {
   onEdit: (rascunho: any) => void;
 }
 
+const getPeriodInfo = (h: number) => {
+  if (h >= 0 && h <= 5) {
+    return { label: 'Madrugada', icon: 'moon', color: '#6366f1' };
+  }
+  if (h >= 6 && h <= 11) {
+    return { label: 'Manhã', icon: 'cloud-sun', color: '#0284c7' };
+  }
+  if (h >= 12 && h <= 17) {
+    return { label: 'Tarde', icon: 'sun', color: '#d97706' };
+  }
+  return { label: 'Noite', icon: 'moon', color: '#6366f1' };
+};
+
 export default function RascunhoItem({ rascunho, index = 0, onEdit }: RascunhoItemProps) {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [showFreqTooltip, setShowFreqTooltip] = useState(false);
+
+  useEffect(() => {
+    if (showFreqTooltip) {
+      const timer = setTimeout(() => setShowFreqTooltip(false), 4500);
+      return () => clearTimeout(timer);
+    }
+  }, [showFreqTooltip]);
 
   const dateStr = rascunho.updatedAt 
     ? new Date(rascunho.updatedAt.toDate()).toLocaleString('pt-BR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })
@@ -37,6 +58,14 @@ export default function RascunhoItem({ rascunho, index = 0, onEdit }: RascunhoIt
       layout={LinearTransition.duration(300)}
     >
       <View style={styles.postCard}>
+        {showFreqTooltip && (
+          <TouchableOpacity 
+            style={[{ position: 'absolute', top: 0, bottom: 0, left: 0, right: 0, zIndex: 40, borderRadius: 24 }]} 
+            activeOpacity={1} 
+            onPress={() => setShowFreqTooltip(false)} 
+          />
+        )}
+
         {/* Modal de Exclusão */}
         <Modal transparent visible={showDeleteModal} animationType="fade" onRequestClose={() => setShowDeleteModal(false)}>
           <View style={styles.deleteModalOverlay}>
@@ -60,24 +89,92 @@ export default function RascunhoItem({ rascunho, index = 0, onEdit }: RascunhoIt
         </Modal>
 
         <View style={styles.postHeader}>
-          <Text style={styles.postDate}>Salvo em {dateStr}</Text>
+          <View style={{ flex: 1, paddingRight: 8 }}>
+            <Text style={styles.postDate}>Salvo em {dateStr}</Text>
+
+            {typeof rascunho.horarioAproximado === 'number' && (() => {
+              const periodInfo = getPeriodInfo(rascunho.horarioAproximado);
+              const prep = rascunho.horarioAproximado === 1 ? 'da' : 'das';
+              const hourFormatted = `${String(rascunho.horarioAproximado).padStart(2, '0')}:00`;
+              return (
+                <View style={styles.postOccurrenceRow}>
+                  <Text style={styles.postOccurrenceText}>
+                    {`Ocorreu por volta ${prep} ${hourFormatted} (${periodInfo.label} `}
+                  </Text>
+                  <FontAwesome6
+                    name={periodInfo.icon as any}
+                    size={11}
+                    color={periodInfo.color}
+                    style={{ marginRight: 2 }}
+                  />
+                  <Text style={styles.postOccurrenceText}>)</Text>
+                </View>
+              );
+            })()}
+          </View>
           <View style={styles.ownerBadge}>
             <Text style={styles.ownerBadgeText}>Rascunho</Text>
           </View>
         </View>
 
-        {rascunho.crimeKey ? (
-          <View style={[styles.crimeNatureBadge, { backgroundColor: `${getCrimeIcon(rascunho.crimeKey).color}20` }]}>
-            <FontAwesome6 name={getCrimeIcon(rascunho.crimeKey).icon as any} size={12} color={getCrimeIcon(rascunho.crimeKey).color} />
-            <Text style={[styles.crimeNatureText, { color: getCrimeIcon(rascunho.crimeKey).color }]}>
-              {formatCrimeName(rascunho.crimeKey)}
-            </Text>
-          </View>
-        ) : (
-          <View style={[styles.crimeNatureBadge, { backgroundColor: '#f3f4f6' }]}>
-            <Text style={[styles.crimeNatureText, { color: '#6b7280' }]}>NATUREZA NÃO SELECIONADA</Text>
-          </View>
-        )}
+        <View style={styles.natureAndFreqRow}>
+          {rascunho.crimeKey ? (
+            <View style={[styles.crimeNatureBadge, { backgroundColor: `${getCrimeIcon(rascunho.crimeKey).color}20` }]}>
+              <FontAwesome6 name={getCrimeIcon(rascunho.crimeKey).icon as any} size={12} color={getCrimeIcon(rascunho.crimeKey).color} />
+              <Text style={[styles.crimeNatureText, { color: getCrimeIcon(rascunho.crimeKey).color }]}>
+                {formatCrimeName(rascunho.crimeKey)}
+              </Text>
+            </View>
+          ) : (
+            <View style={[styles.crimeNatureBadge, { backgroundColor: '#f3f4f6' }]}>
+              <Text style={[styles.crimeNatureText, { color: '#6b7280' }]}>NATUREZA NÃO SELECIONADA</Text>
+            </View>
+          )}
+
+          {rascunho.frequencia && (
+            <View style={{ position: 'relative', zIndex: 60 }}>
+              <TouchableOpacity
+                activeOpacity={0.7}
+                onPress={() => setShowFreqTooltip(!showFreqTooltip)}
+                style={[
+                  styles.frequenciaBadge,
+                  rascunho.frequencia === 'recorrente'
+                    ? styles.frequenciaBadgeRecorrente
+                    : styles.frequenciaBadgePontual,
+                ]}
+              >
+                <FontAwesome6
+                  name={rascunho.frequencia === 'recorrente' ? 'arrows-rotate' : 'bolt'}
+                  size={11}
+                  color={rascunho.frequencia === 'recorrente' ? '#d97706' : '#2563eb'}
+                />
+                <Text
+                  style={[
+                    styles.frequenciaBadgeText,
+                    { color: rascunho.frequencia === 'recorrente' ? '#b45309' : '#1d4ed8' },
+                  ]}
+                >
+                  {rascunho.frequencia === 'recorrente' ? 'Recorrente' : 'Pontual'}
+                </Text>
+              </TouchableOpacity>
+
+              {showFreqTooltip && (
+                <Animated.View
+                  entering={FadeInUp.duration(200)}
+                  exiting={FadeOut.duration(200)}
+                  style={styles.freqTooltip}
+                >
+                  <Text style={styles.freqTooltipText}>
+                    {rascunho.frequencia === 'recorrente'
+                      ? 'Indica uma ocorrência frequente, que costuma se repetir com constância neste local.'
+                      : 'Indica um caso isolado, que não costuma acontecer com frequência neste local.'}
+                  </Text>
+                  <View style={styles.freqTooltipArrow} />
+                </Animated.View>
+              )}
+            </View>
+          )}
+        </View>
         
         <Text style={styles.postText}>
           {rascunho.texto || "Nenhum texto preenchido..."}
@@ -126,12 +223,22 @@ const styles = StyleSheet.create({
   postHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     marginBottom: 12,
   },
   postDate: {
     fontSize: 13,
     color: '#9ca3af',
+    fontWeight: '500',
+  },
+  postOccurrenceRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 3,
+  },
+  postOccurrenceText: {
+    fontSize: 12,
+    color: '#64748b',
     fontWeight: '500',
   },
   ownerBadge: {
@@ -145,6 +252,13 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#4b5563',
   },
+  natureAndFreqRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 12,
+  },
   crimeNatureBadge: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -152,7 +266,55 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     borderRadius: 8,
     alignSelf: 'flex-start',
-    marginBottom: 12,
+  },
+  frequenciaBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+    gap: 5,
+  },
+  frequenciaBadgeRecorrente: {
+    backgroundColor: '#fef3c7',
+  },
+  frequenciaBadgePontual: {
+    backgroundColor: '#eff6ff',
+  },
+  frequenciaBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+  },
+  freqTooltip: {
+    position: 'absolute',
+    top: 32,
+    left: -10,
+    backgroundColor: '#1f2937',
+    padding: 12,
+    borderRadius: 12,
+    width: 220,
+    zIndex: 60,
+    elevation: 8,
+    shadowColor: '#000',
+    shadowOpacity: 0.25,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 5 },
+  },
+  freqTooltipText: {
+    color: '#fff',
+    fontSize: 12,
+    lineHeight: 18,
+    fontWeight: '500',
+  },
+  freqTooltipArrow: {
+    position: 'absolute',
+    top: -5,
+    left: 20,
+    width: 12,
+    height: 12,
+    backgroundColor: '#1f2937',
+    transform: [{ rotate: '45deg' }],
   },
   crimeNatureText: {
     fontSize: 12,

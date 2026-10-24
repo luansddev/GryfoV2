@@ -136,7 +136,7 @@ export default function Relatos() {
 
   const [currentDeviceId, setCurrentDeviceId] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
-  const { searchMode, searchedCity, userCity, setSearchedCity, setSearchMode, setLocation } = useSearchLocation();
+  const { searchMode, searchedCity, userCity, setSearchedCity, setSearchMode, setLocation, location: searchedLocation } = useSearchLocation();
   const { setIsCreatingVigia } = useVigiaCreation();
   const [uiMode, setUiMode] = useState<'idle' | 'creating_relato'>('idle');
   const [selectedRelatoId, setSelectedRelatoId] = useState<string | null>(null);
@@ -333,7 +333,7 @@ export default function Relatos() {
       try {
         const query = encodeURIComponent(`${text.trim()}, São Paulo, Brasil`);
         const res = await fetch(
-          `https://nominatim.openstreetmap.org/search?q=${query}&format=json&limit=5&countrycodes=br&accept-language=pt-BR`,
+          `https://nominatim.openstreetmap.org/search?q=${query}&format=json&limit=5&countrycodes=br&accept-language=pt-BR&addressdetails=1`,
           { headers: { 'User-Agent': 'Gardio/1.0' } }
         );
         const json = await res.json();
@@ -349,19 +349,39 @@ export default function Relatos() {
     }, 500);
   };
 
-  const handleSelectSearchResult = (result: any) => {
+  const handleSelectSearchResult = async (result: any) => {
     const lat = parseFloat(result.lat);
     const lon = parseFloat(result.lon);
     setSearchText('');
     setSearchResults([]);
     Keyboard.dismiss();
-    setSearchedPoint({ latitude: lat, longitude: lon });
+
     mapRef.current?.animateToRegion({
       latitude: lat,
       longitude: lon,
       latitudeDelta: 0.01,
       longitudeDelta: 0.01,
     });
+
+    setLoadingAddress(true);
+    try {
+      const { address, cityName } = await fetchAddressInfo(lat, lon);
+      const effectiveCityName = cityName || result.address?.city || result.address?.town || result.address?.municipality || (searchMode && searchedCity ? searchedCity : null);
+      setSelectedCityName(effectiveCityName);
+      setSelectedPoint({ latitude: lat, longitude: lon });
+      setSelectedAddress(address || result.display_name);
+      setSearchedPoint(null);
+      setCreatingStep('configuring');
+    } catch {
+      const fallbackCity = result.address?.city || result.address?.town || (searchMode && searchedCity ? searchedCity : null);
+      setSelectedCityName(fallbackCity);
+      setSelectedPoint({ latitude: lat, longitude: lon });
+      setSelectedAddress(result.display_name || `${lat.toFixed(4)}, ${lon.toFixed(4)}`);
+      setSearchedPoint(null);
+      setCreatingStep('configuring');
+    } finally {
+      setLoadingAddress(false);
+    }
   };
 
   const formatCityForDisplay = (city: string) => {
@@ -376,11 +396,15 @@ export default function Relatos() {
       const results = await Location.reverseGeocodeAsync({ latitude, longitude });
       if (results && results.length > 0) {
         const item = results[0];
-        cityName = item.city || item.subregion || null;
+        // APENAS item.city é o município confiável.
+        // NUNCA usar item.subregion como fallback de cityName, pois no estado de SP ela frequentemente
+        // retorna a microrregião (ex: "Santos" para Mongaguá/Praia Grande/São Vicente),
+        // o que causava relatos serem atribuídos erroneamente a Santos!
+        cityName = item.city || null;
         
         const street = item.street || item.name || '';
         const number = item.streetNumber ? `, ${item.streetNumber}` : '';
-        const district = item.district || item.subregion ? ` - ${item.district || item.subregion}` : '';
+        const district = item.district ? ` - ${item.district}` : '';
         const cityStr = item.city ? `, ${item.city}` : '';
         const formatted = `${street}${number}${district}${cityStr}`.replace(/^[\s,-]+/, '').trim();
         if (formatted.length > 3) {
@@ -397,7 +421,7 @@ export default function Relatos() {
         );
         const data = await res.json();
         if (data && data.address) {
-          cityName = data.address.city || data.address.town || data.address.municipality || cityName;
+          cityName = data.address.city || data.address.town || data.address.municipality || data.address.village || cityName;
           
           const road = data.address.road || data.address.pedestrian || data.address.suburb || '';
           const num = data.address.house_number ? `, ${data.address.house_number}` : '';
@@ -413,6 +437,10 @@ export default function Relatos() {
         }
       } catch (err) {}
     }
+
+    if (!cityName && searchMode && searchedCity) {
+      cityName = searchedCity;
+    }
     
     return { address, cityName };
   };
@@ -425,7 +453,8 @@ export default function Relatos() {
     
     try {
       const { address, cityName } = await fetchAddressInfo(latitude, longitude);
-      setSelectedCityName(cityName);
+      const effectiveCity = cityName || (searchMode && searchedCity ? searchedCity : null);
+      setSelectedCityName(effectiveCity);
       
       setSelectedPoint({ latitude, longitude });
       setSearchedPoint(null);
@@ -439,7 +468,7 @@ export default function Relatos() {
       setSelectedAddress(address);
     } catch {
       // Se a rede falhar, permite continuar com coordenadas puras
-      setSelectedCityName(null);
+      setSelectedCityName(searchMode && searchedCity ? searchedCity : null);
       setSelectedPoint({ latitude, longitude });
       setSelectedAddress(`${latitude.toFixed(4)}, ${longitude.toFixed(4)}`);
       setCreatingStep('configuring');
@@ -550,8 +579,25 @@ export default function Relatos() {
           );
         })}
         {uiMode === 'creating_relato' && searchedPoint && (
-          <Marker identifier="relatos-target-searched" coordinate={searchedPoint} anchor={{ x: 0.5, y: 1 }}>
-            <View style={{ alignItems: 'center' }} collapsable={false}>
+          <Marker
+            identifier="relatos-target-searched"
+            coordinate={searchedPoint}
+            anchor={{ x: 0.5, y: 1 }}
+            onPress={() => {
+              if (searchedPoint) {
+                handleMapPress({ nativeEvent: { coordinate: searchedPoint } } as any);
+              }
+            }}
+          >
+            <TouchableOpacity
+              activeOpacity={0.8}
+              onPress={() => {
+                if (searchedPoint) {
+                  handleMapPress({ nativeEvent: { coordinate: searchedPoint } } as any);
+                }
+              }}
+              style={{ alignItems: 'center' }}
+            >
               <View style={styles.targetCallout}>
                 <Text style={styles.targetCalloutText}>Toque aqui para confirmar</Text>
               </View>
@@ -560,7 +606,7 @@ export default function Relatos() {
                 <SvgCircle cx="20" cy="20" r="4" fill="#fff" />
                 <Path d="M20 2v6M20 38v-6M2 20h6M38 20h-6" stroke="#fff" strokeWidth={2} strokeLinecap="round" />
               </Svg>
-            </View>
+            </TouchableOpacity>
           </Marker>
         )}
 
@@ -667,6 +713,17 @@ export default function Relatos() {
     }
     prevSearchModeRef.current = searchMode;
   }, [searchMode, userLocation, sharedUserLocation]);
+
+  useEffect(() => {
+    if (searchMode && searchedCity && searchedLocation) {
+      mapRef.current?.animateToRegion({
+        latitude: searchedLocation.latitude,
+        longitude: searchedLocation.longitude,
+        latitudeDelta: 0.08,
+        longitudeDelta: 0.08,
+      });
+    }
+  }, [searchMode, searchedCity, searchedLocation]);
 
   useEffect(() => {
     let deviceId = '';
@@ -885,6 +942,7 @@ export default function Relatos() {
                   setCreatingStep('picking');
                   setSelectedPoint(null);
                   setSelectedAddress(null);
+                  setSelectedCityName(searchMode && searchedCity ? searchedCity : null);
                   setLoadingAddress(false);
                   setSearchedPoint(null);
                   setSearchText('');
@@ -1010,6 +1068,9 @@ export default function Relatos() {
                   style={{ marginTop: 12, alignSelf: 'center', flexDirection: 'row', alignItems: 'center', padding: 8 }}
                   onPress={() => {
                     handleCancelCreating();
+                    if (searchMode && searchedCity) {
+                      setSelectedCityName(searchedCity);
+                    }
                     setNoLocationModalVisible(true);
                   }}
                   activeOpacity={0.7}
@@ -1057,10 +1118,11 @@ export default function Relatos() {
                   style={styles.saveBtn}
                   onPress={() => {
                     const physicalCityNormalized = normalizarCidade(userCity || 'São Paulo');
-                    const clickedCityNormalized = selectedCityName ? normalizarCidade(selectedCityName) : null;
+                    const effectiveCity = selectedCityName || (searchMode && searchedCity ? searchedCity : null);
+                    const clickedCityNormalized = effectiveCity ? normalizarCidade(effectiveCity) : null;
                     
                     if (clickedCityNormalized && clickedCityNormalized !== physicalCityNormalized) {
-                      setVisitorModalInfo({ clickedCity: selectedCityName!, physicalCity: userCity || 'São Paulo' });
+                      setVisitorModalInfo({ clickedCity: effectiveCity!, physicalCity: userCity || 'São Paulo' });
                     } else {
                       openAddRelatoModal();
                     }
@@ -1092,6 +1154,17 @@ export default function Relatos() {
                 currentDeviceId={currentDeviceId}
                 index={0}
                 showOwnerBadge={true}
+                onViewOnMap={(r) => {
+                  setSelectedRelatoId(null);
+                  if (r.latitude && r.longitude) {
+                    mapRef.current?.animateToRegion({
+                      latitude: r.latitude,
+                      longitude: r.longitude,
+                      latitudeDelta: 0.01,
+                      longitudeDelta: 0.01,
+                    });
+                  }
+                }}
               />
             </View>
           </View>
@@ -1117,6 +1190,18 @@ export default function Relatos() {
                       currentDeviceId={currentDeviceId}
                       index={index}
                       showOwnerBadge={true}
+                      onViewOnMap={(r) => {
+                        setSelectedClusterLeaves(null);
+                        setSelectedRelatoId(null);
+                        if (r.latitude && r.longitude) {
+                          mapRef.current?.animateToRegion({
+                            latitude: r.latitude,
+                            longitude: r.longitude,
+                            latitudeDelta: 0.01,
+                            longitudeDelta: 0.01,
+                          });
+                        }
+                      }}
                     />
                   </View>
                 ))}
@@ -1161,14 +1246,34 @@ export default function Relatos() {
             </View>
             <Text style={styles.modalTitle}>Localização Padrão</Text>
             <Text style={styles.modalText}>
-              Por não selecionar um local no mapa, seu relato será associado a sua localização atual: <Text style={{ fontFamily: 'texgyB' }}>{formatCityForDisplay(userCity || 'São Paulo')}</Text>.
+              {searchMode && searchedCity ? (
+                normalizarCidade(searchedCity) !== normalizarCidade(userCity || 'São Paulo') ? (
+                  <>
+                    Por não selecionar um ponto no mapa, seu relato será associado à cidade pesquisada: <Text style={{ fontFamily: 'texgyB' }}>{formatCityForDisplay(searchedCity)}</Text>. Como você está em <Text style={{ fontFamily: 'texgyB' }}>{formatCityForDisplay(userCity || 'São Paulo')}</Text>, ele será marcado como relato de visitante.
+                  </>
+                ) : (
+                  <>
+                    Por não selecionar um ponto no mapa, seu relato será associado a: <Text style={{ fontFamily: 'texgyB' }}>{formatCityForDisplay(searchedCity)}</Text>.
+                  </>
+                )
+              ) : (
+                <>
+                  Por não selecionar um local no mapa, seu relato será associado a sua localização atual: <Text style={{ fontFamily: 'texgyB' }}>{formatCityForDisplay(userCity || 'São Paulo')}</Text>.
+                </>
+              )}
             </Text>
             <View style={styles.modalBtnRow}>
-              <TouchableOpacity style={styles.modalCancelBtn} onPress={() => setNoLocationModalVisible(false)}>
+              <TouchableOpacity style={styles.modalCancelBtn} onPress={() => {
+                setNoLocationModalVisible(false);
+                setSelectedCityName(null);
+              }}>
                 <Text style={styles.modalCancelText}>Cancelar</Text>
               </TouchableOpacity>
               <TouchableOpacity style={styles.modalConfirmBtn} onPress={() => {
                 setNoLocationModalVisible(false);
+                if (searchMode && searchedCity) {
+                  setSelectedCityName(searchedCity);
+                }
                 openAddRelatoModal();
               }}>
                 <Text style={styles.modalConfirmText}>Prosseguir</Text>
@@ -1192,7 +1297,7 @@ export default function Relatos() {
           setActiveDraftId(undefined);
         }}
         initialLocation={selectedPoint}
-        initialCityName={selectedCityName}
+        initialCityName={selectedCityName || (searchMode && searchedCity ? searchedCity : null)}
         initialAddress={selectedAddress}
         draftData={(activeDraftText || activeDraftCrime || activeDraftHorario !== undefined || activeDraftFrequencia) ? {
           texto: activeDraftText || '',

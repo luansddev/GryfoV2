@@ -1,13 +1,24 @@
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal } from 'react-native';
-import { useMemo, useState } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  TouchableOpacity,
+  Modal,
+  PanResponder,
+  Animated as RNAnimated,
+  Dimensions,
+} from 'react-native';
+import { useMemo, useState, useRef } from 'react';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { FontAwesome6 } from '@expo/vector-icons';
 import Animated, { FadeInDown, FadeInUp, FadeOut, LinearTransition } from 'react-native-reanimated';
 import { useVigias, VigiaNotification, ReportNotification, formatDistance } from '../context/VigiasContext';
 import { formatCrimeName, getCrimeIcon } from '../constants/CrimeData';
-import { TempoOcorrido } from '../utils/timestampRelative';
 import TabTransitionView from '../components/TabTransitionView';
+
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 type GrupoNotificacoes = {
   title: string;
@@ -51,109 +62,216 @@ const agruparPorDia = (notificacoes: VigiaNotification[]): GrupoNotificacoes[] =
   return grupos;
 };
 
-/* ================= CARD ================= */
+/* ================= ROW ITEM (SWIPE-TO-DELETE COM CONFIRMAÇÃO) ================= */
 
-interface NotificationCardProps {
+interface NotificationItemProps {
   notification: VigiaNotification;
   index: number;
+  isLast: boolean;
   onPress: () => void;
   onRemove: () => void;
 }
 
-function NotificationCard({ notification, index, onPress, onRemove }: NotificationCardProps) {
+function NotificationItem({ notification, index, isLast, onPress, onRemove }: NotificationItemProps) {
   const isUpvote = notification.type === 'upvote_milestone';
   const isReport = notification.type === 'report_received';
   const crime = notification.crimeKey ? getCrimeIcon(notification.crimeKey) : { icon: 'comment-dots', color: '#2563eb' };
 
-  let title = '';
+  const panX = useRef(new RNAnimated.Value(0)).current;
+  const isDeletingRef = useRef(false);
+  const [isPrimed, setIsPrimed] = useState(false);
+
+  // Limite para confirmar exclusão: o usuário deve puxar cerca de 42% da tela até o final
+  const DELETE_THRESHOLD = SCREEN_WIDTH * 0.42;
+
+  const panResponder = useRef(
+    PanResponder.create({
+      onMoveShouldSetPanResponderCapture: (_, gestureState) => {
+        // Captura apenas gestos estritamente horizontais para não prejudicar o scroll vertical
+        return Math.abs(gestureState.dx) > 10 && Math.abs(gestureState.dx) > Math.abs(gestureState.dy) * 1.5;
+      },
+      onPanResponderGrant: () => {
+        isDeletingRef.current = false;
+      },
+      onPanResponderMove: (_, gestureState) => {
+        if (gestureState.dx > 0) {
+          // Deslizando para a direita (revela a lateral vermelha com lixeira à esquerda)
+          panX.setValue(Math.min(SCREEN_WIDTH, gestureState.dx));
+          const primed = gestureState.dx >= DELETE_THRESHOLD;
+          setIsPrimed(primed);
+        } else {
+          // Bloqueia deslizamento para a esquerda
+          panX.setValue(0);
+          setIsPrimed(false);
+        }
+      },
+      onPanResponderRelease: (_, gestureState) => {
+        if (gestureState.dx > DELETE_THRESHOLD || gestureState.vx > 1.2) {
+          // Puxou até o final para a direita: confirma a exclusão!
+          isDeletingRef.current = true;
+          RNAnimated.timing(panX, {
+            toValue: SCREEN_WIDTH,
+            duration: 180,
+            useNativeDriver: true,
+          }).start(() => {
+            onRemove();
+          });
+        } else {
+          // "Aquela segurada": se soltar antes do final, volta suavemente para a posição inicial
+          setIsPrimed(false);
+          RNAnimated.spring(panX, {
+            toValue: 0,
+            bounciness: 4,
+            speed: 14,
+            useNativeDriver: true,
+          }).start();
+        }
+      },
+      onPanResponderTerminate: () => {
+        setIsPrimed(false);
+        RNAnimated.spring(panX, {
+          toValue: 0,
+          bounciness: 4,
+          speed: 14,
+          useNativeDriver: true,
+        }).start();
+      },
+    })
+  ).current;
+
+  // 1. Linha 1: Categoria / Tag superior
+  let category = '';
   if (isReport) {
-    title = 'Denúncia registrada';
+    category = 'Denúncias';
   } else if (isUpvote) {
-    const n = notification as any;
-    title = n.milestone === 1 ? 'Seu relato recebeu o primeiro incentivo!' : `Seu relato recebeu ${n.milestone} incentivos`;
+    category = 'Incentivos';
   } else {
-    title = notification.crimeKey ? formatCrimeName(notification.crimeKey) : 'Novo relato';
+    const vigiaNames = (notification as any).vigiaNames;
+    category = vigiaNames && vigiaNames.length > 0 ? `Vigia · ${vigiaNames[0]}` : 'Vigias';
   }
 
-  const iconName = isReport ? 'flag' : (crime.icon as any);
-  const iconColor = isReport ? '#dc2626' : crime.color;
-  const badgeIcon = isReport ? 'check' : (isUpvote ? 'arrow-up' : 'eye');
-  const badgeColor = isReport ? '#16a34a' : (isUpvote ? '#eab308' : '#1d4ed8');
+  // 2. Linha 2: Título em destaque (Headline)
+  let headline = '';
+  if (isReport) {
+    headline = 'Denúncia registrada com sucesso';
+  } else if (isUpvote) {
+    const n = notification as any;
+    headline = n.milestone === 1 ? 'Seu relato recebeu o primeiro incentivo!' : `Seu relato recebeu ${n.milestone} incentivos!`;
+  } else {
+    const crimeTitle = notification.crimeKey ? formatCrimeName(notification.crimeKey) : 'Novo relato na região';
+    const dist = (notification as any).distance ? ` · a ${formatDistance((notification as any).distance)}` : '';
+    headline = `${crimeTitle}${dist}`;
+  }
+
+  // 3. Linha 3: Descrição secundária (Snippet / Detalhe)
+  let snippet = '';
+  if (isReport) {
+    const r = notification as ReportNotification;
+    snippet = r.motivoLabel
+      ? `Motivo: ${r.motivoLabel}. Obrigado por colaborar com a comunidade.`
+      : 'Recebemos sua denúncia. Você será notificado quando avaliarmos o caso.';
+  } else if (isUpvote) {
+    snippet = notification.crimeKey
+      ? `Relato de ${formatCrimeName(notification.crimeKey)}. A comunidade está apoiando seu aviso.`
+      : 'A comunidade está apoiando as informações do seu relato.';
+  } else {
+    snippet = notification.texto || 'Toque para visualizar este relato e sua localização exata no mapa.';
+  }
+
+  // Cores e ícone do círculo esquerdo (estilo suave pastel)
+  let circleBg = '#e6f4f1';
+  let iconColor = '#0f766e';
+  let iconName: any = crime.icon || 'shield-halved';
+
+  if (isReport) {
+    circleBg = '#fee2e2';
+    iconColor = '#dc2626';
+    iconName = 'flag';
+  } else if (isUpvote) {
+    circleBg = '#fef3c7';
+    iconColor = '#d97706';
+    iconName = 'arrow-trend-up';
+  } else {
+    circleBg = '#e6f4f1';
+    iconColor = '#0f766e';
+    iconName = crime.icon || 'shield-halved';
+  }
 
   return (
     <Animated.View
-      entering={FadeInDown.delay(Math.min(index, 8) * 40).duration(260)}
-      exiting={FadeOut.duration(180)}
-      layout={LinearTransition.duration(220)}
+      entering={FadeInDown.delay(Math.min(index, 8) * 35).duration(220)}
+      exiting={FadeOut.duration(160)}
+      layout={LinearTransition.duration(200)}
+      style={styles.swipeRowWrapper}
     >
-      <TouchableOpacity
-        style={[styles.card, !notification.read && styles.cardUnread]}
-        activeOpacity={0.85}
-        onPress={onPress}
-      >
-        <View style={[styles.cardIcon, { backgroundColor: `${iconColor}14`, borderColor: `${iconColor}33` }]}>
-          <FontAwesome6 name={iconName} size={17} color={iconColor} />
-          <View style={[styles.cardIconBadge, { backgroundColor: badgeColor }]}>
-            <FontAwesome6 name={badgeIcon as any} size={8} color="#fff" />
-          </View>
+      {/* Fundo vermelho com ícone de lixeira revelado ao deslizar */}
+      <View style={styles.swipeRedBackground}>
+        <View style={styles.swipeActionContent}>
+          <FontAwesome6
+            name="trash-can"
+            size={19}
+            color="#ffffff"
+          />
+          <Text style={styles.swipeActionText}>
+            {isPrimed ? 'Solte para excluir' : 'Puxe até o final'}
+          </Text>
         </View>
+      </View>
 
-        <View style={styles.cardBody}>
-          <View style={styles.cardTitleRow}>
-            <Text style={styles.cardTitle}>
-              {title}
-            </Text>
-            <Text style={styles.cardTime}>{extrairHorario(notification.relatoCreatedAt)}</Text>
+      {/* Conteúdo frontal do item com PanResponder */}
+      <RNAnimated.View
+        style={[
+          styles.itemFront,
+          { transform: [{ translateX: panX }] },
+        ]}
+        {...panResponder.panHandlers}
+      >
+        <TouchableOpacity
+          style={[styles.itemContainer, !notification.read && styles.itemContainerUnread]}
+          activeOpacity={0.7}
+          onPress={() => {
+            if (!isDeletingRef.current) {
+              onPress();
+            }
+          }}
+        >
+          {/* Círculo do ícone à esquerda */}
+          <View style={[styles.iconCircle, { backgroundColor: circleBg }]}>
+            <FontAwesome6 name={iconName} size={19} color={iconColor} />
           </View>
 
-          {isReport ? (
-            <Text style={styles.cardVigia} numberOfLines={1}>
-              Motivo: <Text style={[styles.cardVigiaName, { color: '#dc2626' }]}>{(notification as ReportNotification).motivoLabel || 'Denúncia'}</Text>
-              {notification.crimeKey ? ` · ${formatCrimeName(notification.crimeKey)}` : ''}
-            </Text>
-          ) : isUpvote ? (
-            <Text style={styles.cardVigia} numberOfLines={1}>
-              Relato de <Text style={styles.cardVigiaName}>{notification.crimeKey ? formatCrimeName(notification.crimeKey) : 'aviso'}</Text>
-            </Text>
-          ) : (
-            <Text style={styles.cardVigia} numberOfLines={1}>
-              Vigia <Text style={styles.cardVigiaName}>"{notification.type === 'vigia_relato' ? (notification as any).vigiaNames[0] : ''}"</Text>
-              {(notification.type === 'vigia_relato' && (notification as any).vigiaNames.length > 1) ? ` +${(notification as any).vigiaNames.length - 1}` : ''} · {formatDistance(notification.type === 'vigia_relato' ? (notification as any).distance : 0)}
-            </Text>
-          )}
-
-          {isReport ? (
-            <Text style={styles.cardText} numberOfLines={3}>
-              Recebemos sua denúncia. Obrigado por contribuir! Você será notificado quando analisarmos o caso.
-            </Text>
-          ) : (
-            !!notification.texto && (
-              <Text style={styles.cardText} numberOfLines={2}>
-                {notification.texto}
+          {/* Coluna principal de texto (4 linhas conforme imagem) */}
+          <View style={styles.itemContent}>
+            {/* Linha 1: Categoria em negrito + Ponto verde de não lida à direita */}
+            <View style={styles.categoryRow}>
+              <Text style={styles.categoryText} numberOfLines={1}>
+                {category}
               </Text>
-            )
-          )}
+              {!notification.read && <View style={styles.unreadDot} />}
+            </View>
 
-          <View style={styles.cardFooter}>
-            <Text style={styles.cardRelative}>{TempoOcorrido(notification.relatoCreatedAt)}</Text>
-            <View style={styles.cardLink}>
-              <Text style={styles.cardLinkText}>{isReport ? 'Ver relato' : 'Ver no mapa'}</Text>
-              <FontAwesome6 name={isReport ? 'chevron-right' : 'location-arrow'} size={9} color="#2563eb" />
+            {/* Linha 2: Título / Headline */}
+            <Text style={styles.headlineText} numberOfLines={1}>
+              {headline}
+            </Text>
+
+            {/* Linha 3: Descrição / Corpo */}
+            <Text style={styles.snippetText} numberOfLines={2}>
+              {snippet}
+            </Text>
+
+            {/* Linha 4: Horário */}
+            <View style={styles.timeRow}>
+              <Text style={styles.timeText}>
+                {extrairHorario(notification.relatoCreatedAt)}
+              </Text>
             </View>
           </View>
-        </View>
+        </TouchableOpacity>
 
-        <View style={styles.cardSide}>
-          {!notification.read && <View style={styles.unreadDot} />}
-          <TouchableOpacity
-            onPress={onRemove}
-            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-            style={styles.removeBtn}
-          >
-            <FontAwesome6 name="xmark" size={13} color="#94a3b8" />
-          </TouchableOpacity>
-        </View>
-      </TouchableOpacity>
+        {/* Linha divisória fina entre itens */}
+        {!isLast && <View style={styles.itemDivider} />}
+      </RNAnimated.View>
     </Animated.View>
   );
 }
@@ -165,6 +283,18 @@ export default function Notificacoes() {
   const router = useRouter();
   const { notifications, unreadCount, markAsRead, markAllAsRead, removeNotification, clearNotifications, vigias } = useVigias();
   const [confirmClear, setConfirmClear] = useState(false);
+
+  // Notificação flutuante no footer (toast)
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const toastTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const showToast = (message: string) => {
+    if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
+    setToastMessage(message);
+    toastTimeoutRef.current = setTimeout(() => {
+      setToastMessage(null);
+    }, 2600);
+  };
 
   const grupos = useMemo(() => agruparPorDia(notifications), [notifications]);
 
@@ -183,16 +313,21 @@ export default function Notificacoes() {
     }
   };
 
-  let cardIndex = 0;
+  const handleRemove = (id: string) => {
+    removeNotification(id);
+    showToast('Notificação excluída');
+  };
+
+  let globalIndex = 0;
 
   return (
     <TabTransitionView style={styles.container}>
       <View style={{ paddingTop: insets.top }} />
 
-      {/* Header */}
+      {/* Header clean */}
       <View style={styles.header}>
         <View style={{ flex: 1 }}>
-          <Text style={styles.title}>Atividade</Text>
+          <Text style={styles.title}>Notificações</Text>
           <Text style={styles.subtitle}>
             {notifications.length === 0
               ? vigias.length > 0
@@ -211,8 +346,18 @@ export default function Notificacoes() {
               onPress={markAllAsRead}
               disabled={unreadCount === 0}
               activeOpacity={0.7}
+              accessibilityLabel="Marcar todas como lidas"
             >
-              <FontAwesome6 name="check-double" size={13} color={unreadCount === 0 ? '#cbd5e1' : '#0f172a'} />
+              <FontAwesome6 name="check-double" size={13} color={unreadCount === 0 ? '#cbd5e1' : '#0f766e'} />
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.headerBtn}
+              onPress={() => setConfirmClear(true)}
+              activeOpacity={0.7}
+              accessibilityLabel="Limpar notificações"
+            >
+              <FontAwesome6 name="trash-can" size={13} color="#94a3b8" />
             </TouchableOpacity>
           </View>
         )}
@@ -222,14 +367,14 @@ export default function Notificacoes() {
         <Animated.View entering={FadeInUp.duration(300)} style={styles.empty}>
           <View style={styles.emptyIconOuter}>
             <View style={styles.emptyIconInner}>
-              <FontAwesome6 name="bell" size={28} color="#2563eb" />
+              <FontAwesome6 name="bell" size={26} color="#0f766e" />
             </View>
           </View>
           <Text style={styles.emptyTitle}>
-            Nenhuma atividade ainda
+            Nenhuma notificação
           </Text>
           <Text style={styles.emptyText}>
-            As notificações dos seus vigias e as atualizações dos relatos que você criar aparecerão aqui.
+            As notificações dos seus vigias e as atualizações da comunidade aparecerão aqui.
           </Text>
           {vigias.length === 0 && (
             <TouchableOpacity
@@ -244,22 +389,77 @@ export default function Notificacoes() {
         </Animated.View>
       ) : (
         <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 140 }}>
-          {grupos.map(grupo => (
-            <View key={grupo.title}>
+          {grupos.map((grupo) => (
+            <View key={grupo.title} style={styles.groupSection}>
               <Text style={styles.groupTitle}>{grupo.title}</Text>
-              {grupo.data.map(n => (
-                <NotificationCard
-                  key={n.id}
-                  notification={n}
-                  index={cardIndex++}
-                  onPress={() => handleOpen(n)}
-                  onRemove={() => removeNotification(n.id)}
-                />
-              ))}
+              <View style={styles.groupCard}>
+                {grupo.data.map((n, idx) => (
+                  <NotificationItem
+                    key={n.id}
+                    notification={n}
+                    index={globalIndex++}
+                    isLast={idx === grupo.data.length - 1}
+                    onPress={() => handleOpen(n)}
+                    onRemove={() => handleRemove(n.id)}
+                  />
+                ))}
+              </View>
             </View>
           ))}
         </ScrollView>
       )}
+
+      {/* Pequena notificação flutuante no footer informando a exclusão */}
+      {toastMessage && (
+        <Animated.View
+          entering={FadeInUp.duration(200)}
+          exiting={FadeOut.duration(200)}
+          style={[styles.toastContainer, { bottom: Math.max(24, insets.bottom + 12) }]}
+          pointerEvents="none"
+        >
+          <View style={styles.toastCard}>
+            <View style={styles.toastIconCircle}>
+              <FontAwesome6 name="trash-can" size={11} color="#ef4444" />
+            </View>
+            <Text style={styles.toastText}>{toastMessage}</Text>
+          </View>
+        </Animated.View>
+      )}
+
+      {/* Modal de confirmação para limpar todas */}
+      <Modal visible={confirmClear} transparent animationType="fade">
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <View style={styles.modalIcon}>
+              <FontAwesome6 name="trash-can" size={22} color="#dc2626" />
+            </View>
+            <Text style={styles.modalTitle}>Limpar Notificações</Text>
+            <Text style={styles.modalText}>
+              Tem certeza que deseja apagar todas as notificações? Esta ação não pode ser desfeita.
+            </Text>
+            <View style={styles.modalButtons}>
+              <TouchableOpacity
+                style={styles.modalCancel}
+                onPress={() => setConfirmClear(false)}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.modalCancelText}>Cancelar</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.modalConfirm}
+                onPress={() => {
+                  clearNotifications();
+                  setConfirmClear(false);
+                  showToast('Todas as notificações foram apagadas');
+                }}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.modalConfirmText}>Limpar Tudo</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
     </TabTransitionView>
   );
@@ -268,16 +468,19 @@ export default function Notificacoes() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
+    backgroundColor: '#ffffff',
   },
 
   /* Header */
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 22,
+    paddingHorizontal: 20,
     paddingTop: 14,
-    paddingBottom: 10,
+    paddingBottom: 14,
+    backgroundColor: '#ffffff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#f1f5f9',
   },
   title: {
     fontSize: 24,
@@ -298,148 +501,183 @@ const styles = StyleSheet.create({
     width: 38,
     height: 38,
     borderRadius: 12,
-    backgroundColor: '#fff',
+    backgroundColor: '#f8fafc',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 4,
-    elevation: 2,
   },
   headerBtnDisabled: {
-    opacity: 0.6,
+    opacity: 0.5,
   },
 
+  /* Grupos */
+  groupSection: {
+    backgroundColor: '#ffffff',
+  },
   groupTitle: {
-    fontSize: 13,
+    fontSize: 12,
     fontFamily: 'texgyB',
     color: '#94a3b8',
     textTransform: 'uppercase',
     letterSpacing: 0.8,
-    paddingHorizontal: 22,
-    marginTop: 16,
-    marginBottom: 8,
+    paddingHorizontal: 20,
+    paddingTop: 18,
+    paddingBottom: 8,
+  },
+  groupCard: {
+    backgroundColor: '#ffffff',
   },
 
-  /* Card */
-  card: {
-    flexDirection: 'row',
-    backgroundColor: '#fff',
-    marginHorizontal: 16,
-    marginBottom: 10,
-    padding: 14,
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: 'transparent',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
-    elevation: 2,
+  /* Swipe Container */
+  swipeRowWrapper: {
+    position: 'relative',
+    overflow: 'hidden',
+    backgroundColor: '#dc2626',
   },
-  cardUnread: {
-    borderColor: 'rgba(37, 99, 235, 0.25)',
-    backgroundColor: '#f8faff',
-  },
-  cardIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: 14,
-    borderWidth: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 12,
-  },
-  cardIconBadge: {
+  swipeRedBackground: {
     position: 'absolute',
-    right: -4,
-    bottom: -4,
-    width: 18,
-    height: 18,
-    borderRadius: 9,
-    backgroundColor: '#1d4ed8',
-    borderWidth: 2,
-    borderColor: '#fff',
+    top: 0,
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: '#dc2626',
+    justifyContent: 'center',
+    alignItems: 'flex-start',
+    paddingLeft: 24,
+  },
+  swipeActionContent: {
     alignItems: 'center',
     justifyContent: 'center',
+    minWidth: 96,
   },
-  cardBody: {
+  swipeActionText: {
+    fontSize: 10,
+    fontFamily: 'texgyB',
+    color: '#ffffff',
+    marginTop: 4,
+    letterSpacing: 0.3,
+    textAlign: 'center',
+  },
+
+  /* Item frontal com fundo branco */
+  itemFront: {
+    backgroundColor: '#ffffff',
+  },
+  itemContainer: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    paddingHorizontal: 20,
+    paddingVertical: 14,
+    backgroundColor: '#ffffff',
+  },
+  itemContainerUnread: {
+    backgroundColor: '#fafcfb',
+  },
+  iconCircle: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 14,
+  },
+  itemContent: {
     flex: 1,
   },
-  cardTitleRow: {
+
+  /* Linha 1: Categoria + Ponto verde de não lida */
+  categoryRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    gap: 8,
+    paddingRight: 4,
   },
-  cardTitle: {
-    flex: 1,
+  categoryText: {
     fontSize: 15,
     fontFamily: 'texgyB',
     color: '#0f172a',
   },
-  cardTime: {
-    fontSize: 12,
-    fontFamily: 'texgyR',
-    color: '#94a3b8',
-  },
-  cardVigia: {
-    fontSize: 12,
-    fontFamily: 'texgyR',
-    color: '#475569',
-    marginTop: 3,
-  },
-  cardVigiaName: {
-    fontFamily: 'texgyB',
-    color: '#1d4ed8',
-  },
-  cardText: {
-    fontSize: 13,
-    fontFamily: 'texgyR',
-    color: '#334155',
-    marginTop: 8,
-    lineHeight: 18,
-  },
-  cardFooter: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginTop: 10,
-  },
-  cardRelative: {
-    fontSize: 11,
-    fontFamily: 'texgyR',
-    color: '#94a3b8',
-  },
-  cardLink: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  cardLinkText: {
-    fontSize: 12,
-    fontFamily: 'texgyB',
-    color: '#2563eb',
-  },
-  cardSide: {
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginLeft: 8,
-    paddingVertical: 2,
-  },
   unreadDot: {
-    width: 9,
-    height: 9,
+    width: 10,
+    height: 10,
     borderRadius: 5,
-    backgroundColor: '#2563eb',
-  },
-  removeBtn: {
-    marginTop: 'auto',
-    padding: 2,
+    backgroundColor: '#0f766e',
   },
 
-  /* Empty */
+  /* Linha 2: Headline */
+  headlineText: {
+    fontSize: 14,
+    fontFamily: 'texgyB',
+    color: '#1e293b',
+    marginTop: 2,
+  },
+
+  /* Linha 3: Snippet */
+  snippetText: {
+    fontSize: 13,
+    fontFamily: 'texgyR',
+    color: '#64748b',
+    marginTop: 3,
+    lineHeight: 18,
+  },
+
+  /* Linha 4: Horário */
+  timeRow: {
+    marginTop: 5,
+  },
+  timeText: {
+    fontSize: 13,
+    fontFamily: 'texgyR',
+    color: '#94a3b8',
+  },
+
+  /* Divisória fina */
+  itemDivider: {
+    height: 1,
+    backgroundColor: '#f1f5f9',
+    marginLeft: 82, // Alinhado com o início do conteúdo de texto
+    marginRight: 20,
+  },
+
+  /* Footer Toast */
+  toastContainer: {
+    position: 'absolute',
+    left: 20,
+    right: 20,
+    alignItems: 'center',
+    zIndex: 9999,
+    elevation: 20,
+  },
+  toastCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#0f172a',
+    paddingVertical: 11,
+    paddingHorizontal: 18,
+    borderRadius: 24,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.18,
+    shadowRadius: 10,
+    elevation: 8,
+  },
+  toastIconCircle: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: 'rgba(239, 68, 68, 0.2)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 10,
+  },
+  toastText: {
+    fontSize: 13,
+    fontFamily: 'texgyB',
+    color: '#ffffff',
+  },
+
+  /* Empty State */
   empty: {
     flex: 1,
     alignItems: 'center',
@@ -448,19 +686,19 @@ const styles = StyleSheet.create({
     paddingBottom: 120,
   },
   emptyIconOuter: {
-    width: 104,
-    height: 104,
-    borderRadius: 52,
-    backgroundColor: 'rgba(37, 99, 235, 0.06)',
+    width: 96,
+    height: 96,
+    borderRadius: 48,
+    backgroundColor: '#e6f4f1',
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 20,
   },
   emptyIconInner: {
-    width: 70,
-    height: 70,
-    borderRadius: 35,
-    backgroundColor: 'rgba(37, 99, 235, 0.12)',
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: '#d1ebe6',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -481,7 +719,7 @@ const styles = StyleSheet.create({
   emptyBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#1d4ed8',
+    backgroundColor: '#0f766e',
     paddingVertical: 12,
     paddingHorizontal: 22,
     borderRadius: 14,
@@ -509,9 +747,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   modalIcon: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
+    width: 52,
+    height: 52,
+    borderRadius: 26,
     backgroundColor: '#fef2f2',
     alignItems: 'center',
     justifyContent: 'center',

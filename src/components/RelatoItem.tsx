@@ -17,6 +17,19 @@ interface RelatoItemProps {
   onViewOnMap?: (relato: any) => void;
 }
 
+const getPeriodInfo = (h: number) => {
+  if (h >= 0 && h <= 5) {
+    return { label: 'Madrugada', icon: 'moon', color: '#6366f1' };
+  }
+  if (h >= 6 && h <= 11) {
+    return { label: 'Manhã', icon: 'cloud-sun', color: '#0284c7' };
+  }
+  if (h >= 12 && h <= 17) {
+    return { label: 'Tarde', icon: 'sun', color: '#d97706' };
+  }
+  return { label: 'Noite', icon: 'moon', color: '#6366f1' };
+};
+
 export default function RelatoItem({ relato, currentDeviceId, index = 0, showCityHeader = false, showOwnerBadge = false, onViewOnMap }: RelatoItemProps) {
   const [vote, setVote] = useState<'up' | 'down' | null>(null);
   const [bookmarked, setBookmarked] = useState(relato.bookmarkedBy?.includes(currentDeviceId) || false);
@@ -24,6 +37,7 @@ export default function RelatoItem({ relato, currentDeviceId, index = 0, showCit
   const [isVoting, setIsVoting] = useState(false);
   const [isBookmarking, setIsBookmarking] = useState(false);
   const [showTooltip, setShowTooltip] = useState(false);
+  const [showFreqTooltip, setShowFreqTooltip] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [showReportModal, setShowReportModal] = useState(false);
 
@@ -65,6 +79,13 @@ export default function RelatoItem({ relato, currentDeviceId, index = 0, showCit
       return () => clearTimeout(timer);
     }
   }, [showTooltip]);
+
+  useEffect(() => {
+    if (showFreqTooltip) {
+      const timer = setTimeout(() => setShowFreqTooltip(false), 4500);
+      return () => clearTimeout(timer);
+    }
+  }, [showFreqTooltip]);
 
   useEffect(() => {
     const loadVote = async () => {
@@ -119,9 +140,10 @@ export default function RelatoItem({ relato, currentDeviceId, index = 0, showCit
   };
 
   const iconInfo = getCrimeIcon(relato.crimeKey);
-  const dateStr = relato.createdAt ? new Date(relato.createdAt.toDate()).toLocaleString('pt-BR', {
+  const rawDateStr = relato.createdAt ? new Date(relato.createdAt.toDate()).toLocaleString('pt-BR', {
     day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit'
-  }) : 'Agora mesmo';
+  }) : null;
+  const publishedDateText = rawDateStr ? `Feito em ${rawDateStr}` : 'Feito agora mesmo';
 
   const handleDelete = () => {
     setShowDeleteModal(true);
@@ -188,98 +210,73 @@ export default function RelatoItem({ relato, currentDeviceId, index = 0, showCit
           />
         )}
 
-        {showTooltip && (
+        {(showTooltip || showFreqTooltip) && (
           <TouchableOpacity 
             style={[{ position: 'absolute', top: 0, bottom: 0, left: 0, right: 0, zIndex: 40, borderRadius: 28 }]} 
             activeOpacity={1} 
-            onPress={() => setShowTooltip(false)} 
+            onPress={() => {
+              setShowTooltip(false);
+              setShowFreqTooltip(false);
+            }} 
           />
         )}
         
-        <View style={styles.postHeader}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', zIndex: 50, flexWrap: 'wrap', flex: 1, paddingRight: 8 }}>
-            <Text style={styles.postDate}>{dateStr}</Text>
+        {/* Header do Post */}
+        {showCityHeader ? (
+          /* ============================================================
+             LAYOUT ESPECÍFICO PARA A BIBLIOTECA (showCityHeader = true)
+             As 3 legendas (Visitante, Cidade, Ver no mapa) ficam em linha no topo,
+             e os textos (Feito em, Ocorreu por volta...) ficam abaixo, livres.
+             ============================================================ */
+          <View style={[styles.postHeaderContainerBiblioteca, showTooltip && { zIndex: 100, elevation: 10 }]}>
+            {/* Linha no topo: as 3 legendas em linha */}
+            <View style={[styles.bibliotecaTopBadgesRow, showTooltip && { zIndex: 100, elevation: 10 }]}>
+              <View style={[styles.bibliotecaBadgesLeft, showTooltip && { zIndex: 100, elevation: 10 }]}>
+                {relato.isVisitor && (
+                  <View style={{ position: 'relative', zIndex: 110, elevation: 12 }}>
+                    <TouchableOpacity 
+                      activeOpacity={0.7}
+                      style={[styles.visitorBadge, { marginLeft: 0 }]}
+                      onPress={() => setShowTooltip(!showTooltip)}
+                    >
+                      <View style={styles.visitorIconWrapper}>
+                        <FontAwesome6 name="location-dot" size={10} color="#000" />
+                        <FontAwesome6 name="xmark" size={8} color="#000" style={styles.visitorIconCross} />
+                      </View>
+                      <Text style={styles.visitorBadgeText}>Visitante</Text>
+                    </TouchableOpacity>
 
-            {/* Visitante no listagem normal (showCityHeader = false) */}
-            {relato.isVisitor && !showCityHeader && (
-              <View style={{ position: 'relative', marginLeft: 8 }}>
-                <TouchableOpacity 
-                  activeOpacity={0.7}
-                  style={styles.visitorBadge}
-                  onPress={() => setShowTooltip(!showTooltip)}
-                >
-                  <View style={styles.visitorIconWrapper}>
-                    <FontAwesome6 name="location-dot" size={10} color="#000" />
-                    <FontAwesome6 name="xmark" size={8} color="#000" style={styles.visitorIconCross} />
+                    {showTooltip && (
+                      <Animated.View 
+                        entering={FadeInUp.duration(200)} 
+                        exiting={FadeOut.duration(200)} 
+                        style={[styles.visitorTooltip, { left: 0 }]}
+                      >
+                        <Text style={styles.visitorTooltipText}>
+                          {isOwner 
+                            ? "Você publicou este relato para uma cidade onde não estava fisicamente presente no momento da criação."
+                            : "Este relato foi criado por um usuário que estava fisicamente fora desta cidade no momento da publicação."}
+                        </Text>
+                        <View style={[styles.visitorTooltipArrow, { left: 14 }]} />
+                      </Animated.View>
+                    )}
                   </View>
-                  <Text style={styles.visitorBadgeText}>Visitante</Text>
-                </TouchableOpacity>
+                )}
 
-                {showTooltip && (
-                  <Animated.View 
-                    entering={FadeInUp.duration(200)} 
-                    exiting={FadeOut.duration(200)} 
-                    style={styles.visitorTooltip}
-                  >
-                    <Text style={styles.visitorTooltipText}>
-                    {isOwner 
-                      ? "Você publicou este relato para uma cidade onde não estava fisicamente presente no momento da criação."
-                      : "Este relato foi criado por um usuário que estava fisicamente fora desta cidade no momento da publicação."}
-                  </Text>
-                    <View style={styles.visitorTooltipArrow} />
-                  </Animated.View>
+                {relato.cidade && (
+                  <View style={styles.cityHeaderInsideContainer}>
+                    <FontAwesome6 name="location-dot" size={10} color="#6b7280" />
+                    <Text style={styles.cityHeaderInsideText} numberOfLines={1}>{relato.cidade}</Text>
+                  </View>
                 )}
               </View>
-            )}
-          </View>
 
-          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-            {/* Visitante no "Meus relatos" (showCityHeader = true) */}
-            {relato.isVisitor && showCityHeader && (
-              <View style={{ position: 'relative', marginRight: 8 }}>
-                <TouchableOpacity 
-                  activeOpacity={0.7}
-                  style={styles.visitorBadge}
-                  onPress={() => setShowTooltip(!showTooltip)}
-                >
-                  <View style={styles.visitorIconWrapper}>
-                    <FontAwesome6 name="location-dot" size={10} color="#000" />
-                    <FontAwesome6 name="xmark" size={8} color="#000" style={styles.visitorIconCross} />
-                  </View>
-                  <Text style={styles.visitorBadgeText}>Visitante</Text>
-                </TouchableOpacity>
-
-                {showTooltip && (
-                  <Animated.View 
-                    entering={FadeInUp.duration(200)} 
-                    exiting={FadeOut.duration(200)} 
-                    style={[styles.visitorTooltip, { right: 0, left: 'auto' }]}
-                  >
-                    <Text style={styles.visitorTooltipText}>
-                    {isOwner 
-                      ? "Você publicou este relato para uma cidade onde não estava fisicamente presente no momento da criação."
-                      : "Este relato foi criado por um usuário que estava fisicamente fora desta cidade no momento da publicação."}
-                  </Text>
-                    <View style={styles.visitorTooltipArrow} />
-                  </Animated.View>
-                )}
-              </View>
-            )}
-
-            {showCityHeader && relato.cidade && (
-              <View style={styles.cityHeaderInsideContainer}>
-                <FontAwesome6 name="location-dot" size={10} color="#6b7280" />
-                <Text style={styles.cityHeaderInsideText}>{relato.cidade}</Text>
-              </View>
-            )}
-            
-            {!showCityHeader && onViewOnMap && (
               <TouchableOpacity 
                 style={[
                   styles.topMapButton, 
                   !(relato.latitude && relato.longitude) && styles.topMapButtonDisabled,
                 ]}
-                disabled={!(relato.latitude && relato.longitude)}
+                disabled={!(relato.latitude && relato.longitude) || !onViewOnMap}
                 onPress={() => onViewOnMap?.(relato)}
                 activeOpacity={0.8}
               >
@@ -292,112 +289,249 @@ export default function RelatoItem({ relato, currentDeviceId, index = 0, showCit
                   {relato.latitude && relato.longitude ? "Ver no mapa" : "Sem local"}
                 </Text>
               </TouchableOpacity>
-            )}
-          </View>
-        </View>
+            </View>
 
-        <View style={[styles.crimeNatureBadge, { backgroundColor: `${iconInfo.color}20` }]}>
-          <FontAwesome6 name={iconInfo.icon as any} size={12} color={iconInfo.color} />
-          <Text style={[styles.crimeNatureText, { color: iconInfo.color }]}>
-            {formatCrimeName(relato.crimeKey)}
-          </Text>
+            {/* Linha abaixo: Data de publicação e Horário de Ocorrência com largura livre */}
+            <View style={styles.bibliotecaDatesContainer}>
+              <Text style={styles.postDate}>{publishedDateText}</Text>
+
+              {typeof relato.horarioAproximado === 'number' && (() => {
+                const periodInfo = getPeriodInfo(relato.horarioAproximado);
+                const prep = relato.horarioAproximado === 1 ? 'da' : 'das';
+                const hourFormatted = `${String(relato.horarioAproximado).padStart(2, '0')}:00`;
+                return (
+                  <View style={styles.postOccurrenceRow}>
+                    <Text style={styles.postOccurrenceText}>
+                      {`Ocorreu por volta ${prep} ${hourFormatted} (${periodInfo.label} `}
+                    </Text>
+                    <FontAwesome6
+                      name={periodInfo.icon as any}
+                      size={11}
+                      color={periodInfo.color}
+                      style={{ marginRight: 2 }}
+                    />
+                    <Text style={styles.postOccurrenceText}>)</Text>
+                  </View>
+                );
+              })()}
+            </View>
+          </View>
+        ) : (
+          /* ============================================================
+             LAYOUT PADRÃO (FEED E DEMAIS TELAS - showCityHeader = false)
+             ============================================================ */
+          <View style={[styles.postHeaderContainer, showTooltip && { zIndex: 100, elevation: 10 }]}>
+            <View style={[styles.postHeaderContent, showTooltip && { zIndex: 100, elevation: 10 }]}>
+              {/* Coluna da esquerda: Visitante no topo esquerdo, data de publicação abaixo e horário de ocorrência */}
+              <View style={[styles.postHeaderLeftCol, showTooltip && { zIndex: 100, elevation: 10 }]}>
+                {/* Visitante no topo esquerdo, acima do "Feito em" */}
+                {relato.isVisitor && (
+                  <View style={[styles.visitorTopWrapper, { zIndex: 110, elevation: 12 }]}>
+                    <TouchableOpacity 
+                      activeOpacity={0.7}
+                      style={[styles.visitorBadge, { marginLeft: 0 }]}
+                      onPress={() => setShowTooltip(!showTooltip)}
+                    >
+                      <View style={styles.visitorIconWrapper}>
+                        <FontAwesome6 name="location-dot" size={10} color="#000" />
+                        <FontAwesome6 name="xmark" size={8} color="#000" style={styles.visitorIconCross} />
+                      </View>
+                      <Text style={styles.visitorBadgeText}>Visitante</Text>
+                    </TouchableOpacity>
+
+                    {showTooltip && (
+                      <Animated.View 
+                        entering={FadeInUp.duration(200)} 
+                        exiting={FadeOut.duration(200)} 
+                        style={[styles.visitorTooltip, { left: 0, zIndex: 9999, elevation: 9999 }]}
+                      >
+                        <Text style={styles.visitorTooltipText}>
+                          {isOwner 
+                            ? "Você publicou este relato para uma cidade onde não estava fisicamente presente no momento da criação."
+                            : "Este relato foi criado por um usuário que estava fisicamente fora desta cidade no momento da publicação."}
+                        </Text>
+                        <View style={[styles.visitorTooltipArrow, { left: 14 }]} />
+                      </Animated.View>
+                    )}
+                  </View>
+                )}
+
+                <Text style={styles.postDate}>{publishedDateText}</Text>
+
+                {/* Linha abaixo da data: Horário aproximado em que ocorreu ("Ocorreu por volta das [hora] ([período] [ícone])") */}
+                {typeof relato.horarioAproximado === 'number' && (() => {
+                  const periodInfo = getPeriodInfo(relato.horarioAproximado);
+                  const prep = relato.horarioAproximado === 1 ? 'da' : 'das';
+                  const hourFormatted = `${String(relato.horarioAproximado).padStart(2, '0')}:00`;
+                  return (
+                    <View style={styles.postOccurrenceRow}>
+                      <Text style={styles.postOccurrenceText}>
+                        {`Ocorreu por volta ${prep} ${hourFormatted} (${periodInfo.label} `}
+                      </Text>
+                      <FontAwesome6
+                        name={periodInfo.icon as any}
+                        size={11}
+                        color={periodInfo.color}
+                        style={{ marginRight: 2 }}
+                      />
+                      <Text style={styles.postOccurrenceText}>)</Text>
+                    </View>
+                  );
+                })()}
+              </View>
+
+              {/* Ações da direita: Botão "Ver no mapa" */}
+              <View style={styles.postHeaderRightActions}>
+                <TouchableOpacity 
+                  style={[
+                    styles.topMapButton, 
+                    !(relato.latitude && relato.longitude) && styles.topMapButtonDisabled,
+                  ]}
+                  disabled={!(relato.latitude && relato.longitude) || !onViewOnMap}
+                  onPress={() => onViewOnMap?.(relato)}
+                  activeOpacity={0.8}
+                >
+                  <FontAwesome6 
+                    name={relato.latitude && relato.longitude ? "map-location-dot" : "location-crosshairs"} 
+                    size={12} 
+                    color={relato.latitude && relato.longitude ? "#2563eb" : "#9ca3af"} 
+                  />
+                  <Text style={[styles.topMapButtonText, !(relato.latitude && relato.longitude) && styles.topMapButtonTextDisabled]}>
+                    {relato.latitude && relato.longitude ? "Ver no mapa" : "Sem local"}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        )}
+
+        <View style={[styles.natureAndFreqRow, { zIndex: showFreqTooltip ? 60 : 1, elevation: showFreqTooltip ? 5 : 1 }]}>
+          <View style={[styles.crimeNatureBadge, { backgroundColor: `${iconInfo.color}20` }]}>
+            <FontAwesome6 name={iconInfo.icon as any} size={12} color={iconInfo.color} />
+            <Text style={[styles.crimeNatureText, { color: iconInfo.color }]}>
+              {formatCrimeName(relato.crimeKey)}
+            </Text>
+          </View>
+
+          {relato.frequencia && (
+            <View style={{ position: 'relative', zIndex: showFreqTooltip ? 70 : 1, elevation: showFreqTooltip ? 6 : 1 }}>
+              <TouchableOpacity
+                activeOpacity={0.7}
+                onPress={() => setShowFreqTooltip(!showFreqTooltip)}
+                style={[
+                  styles.frequenciaBadge,
+                  relato.frequencia === 'recorrente'
+                    ? styles.frequenciaBadgeRecorrente
+                    : styles.frequenciaBadgePontual,
+                ]}
+              >
+                <FontAwesome6
+                  name={relato.frequencia === 'recorrente' ? 'arrows-rotate' : 'bolt'}
+                  size={11}
+                  color={relato.frequencia === 'recorrente' ? '#d97706' : '#2563eb'}
+                />
+                <Text
+                  style={[
+                    styles.frequenciaBadgeText,
+                    { color: relato.frequencia === 'recorrente' ? '#b45309' : '#1d4ed8' },
+                  ]}
+                >
+                  {relato.frequencia === 'recorrente' ? 'Recorrente' : 'Pontual'}
+                </Text>
+              </TouchableOpacity>
+
+              {showFreqTooltip && (
+                <Animated.View
+                  entering={FadeInUp.duration(200)}
+                  exiting={FadeOut.duration(200)}
+                  style={styles.freqTooltip}
+                >
+                  <Text style={styles.freqTooltipText}>
+                    {relato.frequencia === 'recorrente'
+                      ? 'Indica uma ocorrência frequente, que costuma se repetir com constância neste local.'
+                      : 'Indica um caso isolado, que não costuma acontecer com frequência neste local.'}
+                  </Text>
+                  <View style={styles.freqTooltipArrow} />
+                </Animated.View>
+              )}
+            </View>
+          )}
         </View>
         
         <Text style={styles.postText}>
           {relato.texto}
         </Text>
 
-        <View style={styles.postFooter}>
-          <View style={styles.voteContainer}>
-            <TouchableOpacity 
-              style={[styles.voteButton, vote === 'up' && styles.voteButtonActiveUp]} 
-              activeOpacity={0.7}
-              onPress={() => handleVote('up')}
-              disabled={isVoting}
-            >
-              <FontAwesome6 name="arrow-up" size={14} color={vote === 'up' ? "#2563eb" : "#6b7280"} />
-              <Text style={[styles.voteText, { color: vote === 'up' ? '#2563eb' : '#6b7280' }]}>
-                {relato.upvotes || 0}
-              </Text>
-            </TouchableOpacity>
-            
-            <View style={styles.voteDivider} />
-            
-            <TouchableOpacity 
-              style={[styles.voteButton, vote === 'down' && styles.voteButtonActiveDown]} 
-              activeOpacity={0.7}
-              onPress={() => handleVote('down')}
-              disabled={isVoting}
-            >
-              <FontAwesome6 name="arrow-down" size={14} color={vote === 'down' ? "#dc2626" : "#6b7280"} />
-              <Text style={[styles.voteText, { color: vote === 'down' ? '#dc2626' : '#6b7280' }]}>
-                {relato.downvotes || 0}
-              </Text>
-            </TouchableOpacity>
-          </View>
+        {/* Divisória estilosa */}
+        <View style={styles.postFooterDivider} />
 
-          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-            {isOwner && showOwnerBadge && (
-              <View style={[styles.ownerBadge, { marginRight: 8 }]}>
+        <View style={styles.postFooter}>
+          {isOwner ? (
+            <View style={styles.ownerFooterLeft}>
+              <View style={styles.ownerBadge}>
                 <Text style={styles.ownerBadgeText}>Feito por mim</Text>
               </View>
-            )}
-            
-            {showCityHeader && onViewOnMap && (
-              <TouchableOpacity 
-                style={[
-                  styles.topMapButton, 
-                  !(relato.latitude && relato.longitude) && styles.topMapButtonDisabled,
-                  { marginRight: 8 }
-                ]}
-                disabled={!(relato.latitude && relato.longitude)}
-                onPress={() => onViewOnMap?.(relato)}
-                activeOpacity={0.8}
-              >
-                <FontAwesome6 
-                  name={relato.latitude && relato.longitude ? "map-location-dot" : "location-crosshairs"} 
-                  size={12} 
-                  color={relato.latitude && relato.longitude ? "#2563eb" : "#9ca3af"} 
-                />
-                <Text style={[styles.topMapButtonText, !(relato.latitude && relato.longitude) && styles.topMapButtonTextDisabled]}>
-                  {relato.latitude && relato.longitude ? "Ver no mapa" : "Sem local"}
-                </Text>
-              </TouchableOpacity>
-            )}
 
-            <View style={styles.actionContainer}>
-              {isOwner ? (
-                <TouchableOpacity 
-                  style={[styles.actionButton, { backgroundColor: '#fef2f2' }]} 
-                  activeOpacity={0.7}
-                  onPress={handleDelete}
-                >
-                  <FontAwesome6 name="trash-can" size={14} color="#dc2626" />
-                </TouchableOpacity>
-              ) : (
-                <>
-                  <TouchableOpacity 
-                    style={[styles.actionButton, bookmarked && styles.actionButtonActiveBlack]} 
-                    activeOpacity={0.7}
-                    onPress={handleBookmarkToggle}
-                    disabled={isBookmarking}
-                  >
-                    <FontAwesome6 name="bookmark" size={14} color={bookmarked ? "#000000" : "#6b7280"} solid={bookmarked} />
-                  </TouchableOpacity>
-                  
-                  <View style={styles.actionDivider} />
-                  
-                  <TouchableOpacity 
-                    style={[styles.actionButton, flagged && styles.actionButtonActiveRed]} 
-                    activeOpacity={0.7}
-                    onPress={() => setShowReportModal(true)}
-                  >
-                    <FontAwesome6 name="flag" size={14} color={flagged ? "#dc2626" : "#6b7280"} solid={flagged} />
-                  </TouchableOpacity>
-                </>
-              )}
+              <TouchableOpacity 
+                style={styles.ownerDeleteButton} 
+                activeOpacity={0.7}
+                onPress={handleDelete}
+              >
+                <FontAwesome6 name="trash-can" size={14} color="#dc2626" />
+              </TouchableOpacity>
             </View>
-          </View>
+          ) : (
+            <>
+              <View style={styles.voteContainer}>
+                <TouchableOpacity 
+                  style={[styles.voteButton, vote === 'up' && styles.voteButtonActiveUp]} 
+                  activeOpacity={0.7}
+                  onPress={() => handleVote('up')}
+                  disabled={isVoting}
+                >
+                  <FontAwesome6 name="arrow-up" size={14} color={vote === 'up' ? "#2563eb" : "#6b7280"} />
+                  <Text style={[styles.voteText, { color: vote === 'up' ? '#2563eb' : '#6b7280' }]}>
+                    {relato.upvotes || 0}
+                  </Text>
+                </TouchableOpacity>
+                
+                <View style={styles.voteDivider} />
+                
+                <TouchableOpacity 
+                  style={[styles.voteButton, vote === 'down' && styles.voteButtonActiveDown]} 
+                  activeOpacity={0.7}
+                  onPress={() => handleVote('down')}
+                  disabled={isVoting}
+                >
+                  <FontAwesome6 name="arrow-down" size={14} color={vote === 'down' ? "#dc2626" : "#6b7280"} />
+                  <Text style={[styles.voteText, { color: vote === 'down' ? '#dc2626' : '#6b7280' }]}>
+                    {relato.downvotes || 0}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+
+              <View style={styles.actionContainer}>
+                <TouchableOpacity 
+                  style={[styles.actionButton, bookmarked && styles.actionButtonActiveBlack]} 
+                  activeOpacity={0.7}
+                  onPress={handleBookmarkToggle}
+                  disabled={isBookmarking}
+                >
+                  <FontAwesome6 name="bookmark" size={14} color={bookmarked ? "#000000" : "#6b7280"} solid={bookmarked} />
+                </TouchableOpacity>
+                
+                <View style={styles.actionDivider} />
+                
+                <TouchableOpacity 
+                  style={[styles.actionButton, flagged && styles.actionButtonActiveRed]} 
+                  activeOpacity={0.7}
+                  onPress={() => setShowReportModal(true)}
+                >
+                  <FontAwesome6 name="flag" size={14} color={flagged ? "#dc2626" : "#6b7280"} solid={flagged} />
+                </TouchableOpacity>
+              </View>
+            </>
+          )}
         </View>
       </View>
     </Animated.View>
@@ -433,16 +567,76 @@ const styles = StyleSheet.create({
     shadowRadius: 10,
     elevation: 3,
   },
+  postHeaderContainer: {
+    marginBottom: 12,
+  },
+  postHeaderContainerBiblioteca: {
+    marginBottom: 12,
+  },
+  bibliotecaTopBadgesRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 10,
+  },
+  bibliotecaBadgesLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 6,
+    flex: 1,
+    marginRight: 8,
+  },
+  bibliotecaDatesContainer: {
+    width: '100%',
+  },
+  postHeaderContent: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+  },
+  postHeaderLeftCol: {
+    flex: 1,
+    marginRight: 8,
+  },
+  postDateRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+  },
+  visitorTopWrapper: {
+    position: 'relative',
+    alignSelf: 'flex-start',
+    marginBottom: 6,
+    zIndex: 60,
+  },
   postHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     marginBottom: 12,
   },
   postDate: {
     fontSize: 13,
     color: '#9ca3af',
     fontWeight: '500',
+  },
+  postOccurrenceRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 4,
+    flexWrap: 'wrap',
+  },
+  postOccurrenceText: {
+    fontSize: 12,
+    color: '#64748b',
+    fontWeight: '500',
+  },
+  postHeaderRightActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexShrink: 0,
+    gap: 6,
   },
   visitorBadge: {
     flexDirection: 'row',
@@ -505,14 +699,27 @@ const styles = StyleSheet.create({
   },
   ownerBadge: {
     backgroundColor: '#eff6ff',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 12,
   },
   ownerBadgeText: {
     fontSize: 11,
     fontWeight: '700',
     color: '#2563eb',
+  },
+  ownerFooterLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  ownerDeleteButton: {
+    backgroundColor: '#fef2f2',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderRadius: 12,
   },
   deleteModalOverlay: {
     flex: 1,
@@ -586,6 +793,13 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#fff',
   },
+  natureAndFreqRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 12,
+  },
   crimeNatureBadge: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -594,7 +808,55 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     borderRadius: 8,
     alignSelf: 'flex-start',
-    marginBottom: 12,
+  },
+  frequenciaBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+    gap: 5,
+  },
+  frequenciaBadgeRecorrente: {
+    backgroundColor: '#fef3c7',
+  },
+  frequenciaBadgePontual: {
+    backgroundColor: '#eff6ff',
+  },
+  frequenciaBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+  },
+  freqTooltip: {
+    position: 'absolute',
+    top: 32,
+    left: -10,
+    backgroundColor: '#1f2937',
+    padding: 12,
+    borderRadius: 12,
+    width: 220,
+    zIndex: 60,
+    elevation: 8,
+    shadowColor: '#000',
+    shadowOpacity: 0.25,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 5 },
+  },
+  freqTooltipText: {
+    color: '#fff',
+    fontSize: 12,
+    lineHeight: 18,
+    fontWeight: '500',
+  },
+  freqTooltipArrow: {
+    position: 'absolute',
+    top: -5,
+    left: 20,
+    width: 12,
+    height: 12,
+    backgroundColor: '#1f2937',
+    transform: [{ rotate: '45deg' }],
   },
   crimeNatureText: {
     fontSize: 12,
@@ -607,8 +869,14 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: '#374151',
     lineHeight: 24,
-    marginBottom: 20,
+    marginBottom: 16,
     letterSpacing: 0.2,
+  },
+  postFooterDivider: {
+    height: 1,
+    backgroundColor: '#f1f5f9',
+    marginBottom: 16,
+    width: '100%',
   },
   postFooter: {
     flexDirection: 'row',
@@ -681,6 +949,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: 12,
+    flexShrink: 0,
   },
   topMapButtonDisabled: {
     backgroundColor: '#f3f4f6',

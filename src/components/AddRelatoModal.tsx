@@ -19,7 +19,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import Animated, { FadeIn, FadeInDown, FadeInUp, ZoomIn } from 'react-native-reanimated';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
-import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
+import MapView, { PROVIDER_GOOGLE } from 'react-native-maps';
 import Svg, { Path } from 'react-native-svg';
 
 import {
@@ -181,7 +181,7 @@ function AddRelatoContent({
 
   const [text, setText] = useState(draftData?.texto || '');
   const [selectedCrime, setSelectedCrime] = useState<string | null>(draftData?.crimeKey || null);
-  const [hour, setHour] = useState<number>(draftData?.horarioAproximado ?? new Date().getHours());
+  const [hour, setHour] = useState<number>(draftData?.horarioAproximado ?? 12);
   const [frequencia, setFrequencia] = useState<'pontual' | 'recorrente'>(draftData?.frequencia || 'pontual');
 
   const [isSelectingCrime, setIsSelectingCrime] = useState(false);
@@ -195,11 +195,12 @@ function AddRelatoContent({
   const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
 
-  const { userCity } = useSearchLocation();
+  const { userCity, searchMode, searchedCity } = useSearchLocation();
   const textInputRef = useRef<TextInput>(null);
   const scrollRef = useRef<ScrollView>(null);
 
-  const targetCityNormalized = normalizarCidade(initialCityName || userCity || 'São Paulo');
+  const effectiveTargetCity = initialCityName || (searchMode && searchedCity ? searchedCity : null) || userCity || 'São Paulo';
+  const targetCityNormalized = normalizarCidade(effectiveTargetCity);
   const userCityNormalized = normalizarCidade(userCity || 'São Paulo');
   const isVisitor = targetCityNormalized !== userCityNormalized;
 
@@ -214,7 +215,7 @@ function AddRelatoContent({
     if (visible) {
       setText(draftData?.texto || '');
       setSelectedCrime(draftData?.crimeKey || null);
-      setHour(draftData?.horarioAproximado ?? new Date().getHours());
+      setHour(draftData?.horarioAproximado ?? 12);
       setFrequencia(draftData?.frequencia || 'pontual');
       setIsSelectingCrime(false);
       setShowOptions(false);
@@ -369,11 +370,7 @@ function AddRelatoContent({
         <View style={styles.compactSummaryItem}>
           <FontAwesome6 name="location-dot" size={11} color="#64748b" />
           <Text style={styles.compactSummaryText} numberOfLines={1}>
-            {initialCityName
-              ? formatCityForDisplay(initialCityName)
-              : userCity
-              ? formatCityForDisplay(userCity)
-              : 'Sua cidade'}
+            {formatCityForDisplay(effectiveTargetCity)}
           </Text>
         </View>
         <View style={styles.compactDivider} />
@@ -551,13 +548,20 @@ function AddRelatoContent({
                 <Animated.View entering={FadeInDown.duration(300)} style={styles.darkLocationCard}>
                   {initialLocation ? (
                     <>
-                      {/* Mini mapa escuro com marcador exato */}
+                      {/* Mini mapa escuro com marcador exato sobreposto (sem delay nativo) */}
                       <View style={styles.miniMapContainerDark}>
                         <MapView
+                          key={`${initialLocation.latitude.toFixed(6)},${initialLocation.longitude.toFixed(6)}`}
                           provider={PROVIDER_GOOGLE}
                           style={styles.miniMap}
                           customMapStyle={darkMapStyle}
                           initialRegion={{
+                            latitude: initialLocation.latitude,
+                            longitude: initialLocation.longitude,
+                            latitudeDelta: 0.005,
+                            longitudeDelta: 0.005,
+                          }}
+                          region={{
                             latitude: initialLocation.latitude,
                             longitude: initialLocation.longitude,
                             latitudeDelta: 0.005,
@@ -570,21 +574,22 @@ function AddRelatoContent({
                           liteMode={Platform.OS === 'android'}
                           toolbarEnabled={false}
                           pointerEvents="none"
-                        >
-                          <Marker coordinate={initialLocation} anchor={{ x: 0.5, y: 1 }}>
-                            <View style={{ alignItems: 'center', justifyContent: 'center' }}>
-                              <Svg width={32} height={32} viewBox="-2 -2 28 28">
-                                <Path
-                                  d="M2 4c0-1.1.9-2 2-2h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2h-6l-2 6-2-6H4c-1.1 0-2-.9-2-2V4z"
-                                  fill={getRelatoColor(selectedCrime)}
-                                  stroke="#ffffff"
-                                  strokeWidth={2}
-                                  strokeLinejoin="round"
-                                />
-                              </Svg>
-                            </View>
-                          </Marker>
-                        </MapView>
+                        />
+
+                        {/* Balãozinho de relato sobreposto exatamente no centro do mapa (zero delay) */}
+                        <View style={styles.centerMarkerOverlay} pointerEvents="none">
+                          <View style={styles.markerBalloonWrapper}>
+                            <Svg width={32} height={32} viewBox="-2 -2 28 28">
+                              <Path
+                                d="M2 4c0-1.1.9-2 2-2h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2h-6l-2 6-2-6H4c-1.1 0-2-.9-2-2V4z"
+                                fill={getRelatoColor(selectedCrime)}
+                                stroke="#ffffff"
+                                strokeWidth={2}
+                                strokeLinejoin="round"
+                              />
+                            </Svg>
+                          </View>
+                        </View>
 
                         {/* Botão Trocar Localização posicionado no topo esquerdo */}
                         <TouchableOpacity
@@ -614,19 +619,10 @@ function AddRelatoContent({
                           </View>
                           <View style={{ flex: 1 }}>
                             <Text style={styles.darkLocationAddressText} numberOfLines={2}>
-                              {initialAddress ||
-                                (initialCityName
-                                  ? formatCityForDisplay(initialCityName)
-                                  : userCity
-                                  ? formatCityForDisplay(userCity)
-                                  : 'Localização selecionada no mapa')}
+                              {initialAddress || formatCityForDisplay(effectiveTargetCity)}
                             </Text>
                             <Text style={styles.darkLocationCitySub}>
-                              {initialCityName
-                                ? formatCityForDisplay(initialCityName)
-                                : userCity
-                                ? formatCityForDisplay(userCity)
-                                : 'São Paulo'}
+                              {formatCityForDisplay(effectiveTargetCity)}
                             </Text>
                           </View>
                         </View>
@@ -686,7 +682,7 @@ function AddRelatoContent({
                           <Text style={styles.darkNoLocationSub}>
                             Vinculado à cidade de{' '}
                             <Text style={{ fontFamily: 'texgyB', color: '#f8fafc' }}>
-                              {formatCityForDisplay(userCity || 'São Paulo')}
+                              {formatCityForDisplay(effectiveTargetCity)}
                             </Text>
                           </Text>
                           <Text style={styles.darkNoLocationHint}>
@@ -1004,7 +1000,6 @@ function HorarioSlider({
   onSlidingStart?: () => void;
   onSlidingEnd?: () => void;
 }) {
-  const [trackWidth, setTrackWidth] = useState(0);
   const trackRef = useRef<View>(null);
   const layoutInfo = useRef<{ pageX: number; width: number }>({ pageX: 0, width: 0 });
 
@@ -1046,7 +1041,14 @@ function HorarioSlider({
     })
   ).current;
 
-  const thumbLeft = trackWidth > 0 ? (hour / 23) * (trackWidth - THUMB_SIZE) : 0;
+  // Renderização instantânea do cursor:
+  // left de 0% a 100% com translateX compensando o THUMB_SIZE proporcionalmente:
+  // hour = 0  -> left: 0%, translateX: 0px
+  // hour = 23 -> left: 100%, translateX: -THUMB_SIZE px
+  // hour = 12 -> exatamente no centro às 12h
+  // Não depende de onLayout assíncrono para aparecer no frame 0.
+  const thumbPercentLeft = `${((hour / 23) * 100).toFixed(4)}%` as any;
+  const thumbTranslateX = -THUMB_SIZE * (hour / 23);
 
   return (
     <View style={styles.sliderContainer}>
@@ -1066,7 +1068,6 @@ function HorarioSlider({
           style={styles.trackTouchArea}
           onLayout={(e) => {
             const w = e.nativeEvent.layout.width;
-            setTrackWidth(w);
             trackRef.current?.measureInWindow((x, _y, width) => {
               layoutInfo.current = { pageX: x, width: width || w };
             });
@@ -1082,20 +1083,19 @@ function HorarioSlider({
             pointerEvents="none"
           />
 
-          {/* Cursor / Marcador (Thumb) que salta de 1h em 1h */}
-          {trackWidth > 0 && (
-            <View
-              style={[
-                styles.sliderThumb,
-                {
-                  left: thumbLeft,
-                },
-              ]}
-              pointerEvents="none"
-            >
-              <View style={styles.sliderThumbDot} />
-            </View>
-          )}
+          {/* Cursor / Marcador (Thumb) que salta de 1h em 1h (renderização instantânea sem delay) */}
+          <View
+            style={[
+              styles.sliderThumb,
+              {
+                left: thumbPercentLeft,
+                transform: [{ translateX: thumbTranslateX }],
+              },
+            ]}
+            pointerEvents="none"
+          >
+            <View style={styles.sliderThumbDot} />
+          </View>
         </View>
 
         <TouchableOpacity
@@ -1302,9 +1302,21 @@ const styles = StyleSheet.create({
     height: 140,
     backgroundColor: '#1e293b',
     overflow: 'hidden',
+    position: 'relative',
   },
   miniMap: {
     ...StyleSheet.absoluteFill,
+  },
+  centerMarkerOverlay: {
+    ...StyleSheet.absoluteFill,
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 5,
+  },
+  markerBalloonWrapper: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    transform: [{ translateY: -16 }],
   },
   darkLocationCardBody: {
     padding: 14,
