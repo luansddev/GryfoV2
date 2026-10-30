@@ -1,13 +1,63 @@
+import { apiConfig, isDevelopmentEnvironment } from '../../config/api';
+import { getLegacyPeriod } from '../api/gardioApi';
+import { ApiError } from '../api/httpClient';
+
 export interface RawCrimeData {
   [city: string]: {
     [crimeType: string]: {
       quantidade: number;
       localizacoes: { latitude: number; longitude: number }[];
-    }
-  }
+    };
+  };
 }
 
-export const fetchCrimeDataForPeriod = async (month: number, year: number): Promise<RawCrimeData | null> => {
+/**
+ * Determina se um erro retornado pela Gardio API é uma falha transitória/recuperável
+ * que justifica o acionamento de contingência (fallback) para o Firebase Hosting.
+ */
+function isRecoverableApiError(error: unknown): boolean {
+  const isApiError =
+    error instanceof ApiError ||
+    (error instanceof Error && error.name === 'ApiError' && 'kind' in error);
+
+  if (isApiError) {
+    const apiErr = error as ApiError;
+
+    // Cancelamento explícito nunca deve acionar fallback
+    if (apiErr.kind === 'aborted') {
+      return false;
+    }
+
+    // Falhas de rede, timeout e respostas com contrato corrompido são recuperáveis
+    if (
+      apiErr.kind === 'network' ||
+      apiErr.kind === 'timeout' ||
+      apiErr.kind === 'invalid_response'
+    ) {
+      return true;
+    }
+
+    // Erros HTTP: 404 (período não publicado na API), 429 (rate limit) e 5xx (falhas de servidor)
+    if (apiErr.kind === 'http' && typeof apiErr.status === 'number') {
+      if (apiErr.status === 404 || apiErr.status === 429) {
+        return true;
+      }
+      if (apiErr.status >= 500 && apiErr.status <= 599) {
+        return true;
+      }
+      // 400, 401, 403, 422 e outros 4xx não são recuperáveis
+      return false;
+    }
+  }
+
+  // Erros de configuração (ex: URL ausente), de código ou desconhecidos não disparam fallback
+  return false;
+}
+
+/**
+ * Busca os dados criminais históricos diretamente no Firebase Hosting (implementação original).
+ */
+const fetchFromFirebase = async (month: number, year: number): Promise<RawCrimeData | null> => {
   try {
     const res = await fetch(`https://gryfocorp.web.app/ssp-${month}-${year}.json`);
     if (!res.ok) {
@@ -20,6 +70,30 @@ export const fetchCrimeDataForPeriod = async (month: number, year: number): Prom
     console.error(`Error fetching crime data for ${month}/${year}:`, error);
     throw error;
   }
+};
+
+export const fetchCrimeDataForPeriod = async (month: number, year: number): Promise<RawCrimeData | null> => {
+  if (apiConfig.source === 'api') {
+    try {
+      const data = await getLegacyPeriod(month, year);
+      return data as RawCrimeData;
+    } catch (apiError: unknown) {
+      if (isRecoverableApiError(apiError)) {
+        if (isDevelopmentEnvironment()) {
+          console.warn(
+            `[CrimeHistoryService] Falha recuperável na Gardio API para ${month}/${year}. ` +
+            `Acionando fallback para o Firebase Hosting. Detalhes: ${
+              apiError instanceof Error ? apiError.message : String(apiError)
+            }`
+          );
+        }
+        return fetchFromFirebase(month, year);
+      }
+      throw apiError;
+    }
+  }
+
+  return fetchFromFirebase(month, year);
 };
 
 const CACHE: Record<string, RawCrimeData | undefined> = {};
@@ -44,6 +118,9 @@ export const getCrimeData = async (month: number, year: number, forceRefresh: bo
     }
     delete PENDING_REQUESTS[cacheKey];
     return data;
+  }).catch(error => {
+    delete PENDING_REQUESTS[cacheKey];
+    throw error;
   });
 
   PENDING_REQUESTS[cacheKey] = request;

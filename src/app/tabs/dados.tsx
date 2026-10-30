@@ -22,6 +22,7 @@ import * as Location from 'expo-location';
 import { useSearchLocation } from '../../context/SearchLocationContext';
 import { normalizarCidade } from '../../context/Normalizer';
 import { prettifySspKey } from '../../services/analytics/CityDirectory';
+import { getCrimeData, RawCrimeData } from '../../services/analytics/CrimeHistoryService';
 
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
@@ -300,32 +301,43 @@ export default function Dados() {
         });
 
         // Reverse geocoding via REST API (evita o Geocoder nativo instável)
+        let cidade = 'S.PAULO';
         try {
           const geoRes = await fetch(
             `https://nominatim.openstreetmap.org/reverse?lat=${loc.coords.latitude}&lon=${loc.coords.longitude}&format=json&accept-language=pt-BR`,
             { headers: { 'User-Agent': 'Gardio/1.0' } }
           );
           const geoJson = await geoRes.json();
-          if (!isMounted) return;
-
-          const nomeEncontrado = geoJson?.address?.city || geoJson?.address?.town || geoJson?.address?.municipality || 'Desconhecida';
-          setCityName(nomeEncontrado);
-
-          const cidade = normalizarCidade(nomeEncontrado);
-
-          const res = await fetch('https://gryfocorp.web.app/ssp-2-2026.json');
-          const json = await res.json();
-          if (!isMounted) return;
-
-          setAllCitiesData(json);
-          // Se não encontrou a cidade em SP, ou se o usuário estiver fora, vamos padronizar para "S.PAULO" caso não ache
-          const defaultCity = json[cidade] ? cidade : 'S.PAULO';
-          setDadosCidade(json[defaultCity] || null);
-          if (!json[cidade]) {
-             setCityName('São Paulo');
+          if (isMounted) {
+            const nomeEncontrado = geoJson?.address?.city || geoJson?.address?.town || geoJson?.address?.municipality;
+            if (nomeEncontrado) {
+              setCityName(nomeEncontrado);
+              cidade = normalizarCidade(nomeEncontrado);
+            }
           }
         } catch (geoError) {
-          console.warn('Geocoder/dados indisponível:', geoError);
+          console.warn('Geocoder indisponível:', geoError);
+        }
+
+        if (!isMounted) return;
+
+        try {
+          const json = await getCrimeData(2, 2026);
+          if (!isMounted) return;
+
+          if (json) {
+            setAllCitiesData(json);
+            // Se não encontrou a cidade em SP, ou se o usuário estiver fora, vamos padronizar para "S.PAULO" caso não ache
+            const defaultCity = json[cidade] ? cidade : 'S.PAULO';
+            setDadosCidade(json[defaultCity] || null);
+            if (!json[cidade]) {
+              setCityName('São Paulo');
+            }
+          } else {
+            console.warn('Dados criminais indisponíveis para 02/2026');
+          }
+        } catch (crimeError) {
+          console.warn('Erro ao carregar dados criminais:', crimeError);
         }
       } catch (error) {
         console.warn('Erro ao obter localização:', error);
@@ -547,8 +559,10 @@ export default function Dados() {
 
     Object.keys(dadosCidade).forEach(key => {
       if (key === 'nome_da_cidade' || key === 'timestamp') return;
-      const locs = dadosCidade[key]?.localizacoes;
-      const count = Array.isArray(locs) ? locs.length : 0;
+      const entry = dadosCidade[key];
+      const count = typeof entry?.quantidade === 'number'
+        ? entry.quantidade
+        : (Array.isArray(entry?.localizacoes) ? entry.localizacoes.length : 0);
       if (count > 0) {
         counts.push({ name: key, count });
         total += count;
@@ -578,8 +592,10 @@ export default function Dados() {
     let total = 0;
 
     lifeCrimesKeys.forEach(key => {
-      const locs = dadosCidade[key]?.localizacoes;
-      const count = Array.isArray(locs) ? locs.length : 0;
+      const entry = dadosCidade[key];
+      const count = typeof entry?.quantidade === 'number'
+        ? entry.quantidade
+        : (Array.isArray(entry?.localizacoes) ? entry.localizacoes.length : 0);
       data.push({ name: formatCrimeName(key), count });
       total += count;
     });
@@ -598,8 +614,10 @@ export default function Dados() {
       const fName = formatCrimeName(key);
       if (dataMap[fName] === undefined) dataMap[fName] = 0;
 
-      const locs = dadosCidade[key]?.localizacoes;
-      const count = Array.isArray(locs) ? locs.length : 0;
+      const entry = dadosCidade[key];
+      const count = typeof entry?.quantidade === 'number'
+        ? entry.quantidade
+        : (Array.isArray(entry?.localizacoes) ? entry.localizacoes.length : 0);
       dataMap[fName] += count;
       total += count;
     });
@@ -620,8 +638,10 @@ export default function Dados() {
       const fName = formatCrimeName(key);
       if (dataMap[fName] === undefined) dataMap[fName] = 0;
 
-      const locs = dadosCidade[key]?.localizacoes;
-      const count = Array.isArray(locs) ? locs.length : 0;
+      const entry = dadosCidade[key];
+      const count = typeof entry?.quantidade === 'number'
+        ? entry.quantidade
+        : (Array.isArray(entry?.localizacoes) ? entry.localizacoes.length : 0);
       dataMap[fName] += count;
       total += count;
     });
