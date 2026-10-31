@@ -18,6 +18,7 @@ export const physicalCrimesKeys = [
 export const patrimonyCrimesKeys = [
   'ROUBO A BANCO',
   'ROUBO DE CARGA',
+  'FURTO DE CARGA',
   'ROUBO DE VEÍCULO',
   'FURTO DE VEÍCULO',
   'FURTO - OUTROS',

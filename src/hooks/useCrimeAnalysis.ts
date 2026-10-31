@@ -13,7 +13,8 @@ import {
   calculateDominantCrime,
   calculateRatePer100k,
   calculateTopCrimes,
-  calculateStateBenchmark
+  calculateStateBenchmark,
+  getEntryOccurrenceCount
 } from '../services/analytics/MetricsEngine';
 import {
   loadIbgeCities,
@@ -116,11 +117,7 @@ export const useCrimeAnalysis = (normalizedCity: string | null) => {
       const rawCrimes: Record<string, number> = {};
       if (currentData) {
         Object.keys(currentData).forEach(key => {
-          const locs = currentData[key]?.localizacoes;
-          const count = typeof currentData[key]?.quantidade === 'number'
-            ? currentData[key].quantidade
-            : Array.isArray(locs) ? locs.length : 0;
-          rawCrimes[key] = count;
+          rawCrimes[key] = getEntryOccurrenceCount(currentData[key]);
         });
       }
 
@@ -128,10 +125,7 @@ export const useCrimeAnalysis = (normalizedCity: string | null) => {
         const crimes: Record<string, number> = {};
         if (h.data) {
           Object.keys(h.data).forEach(key => {
-            const locs = h.data[key]?.localizacoes;
-            crimes[key] = typeof h.data[key]?.quantidade === 'number'
-              ? h.data[key].quantidade
-              : Array.isArray(locs) ? locs.length : 0;
+            crimes[key] = getEntryOccurrenceCount(h.data[key]);
           });
         }
         return {
@@ -148,11 +142,8 @@ export const useCrimeAnalysis = (normalizedCity: string | null) => {
           const cData = periodAll[cKey];
           if (cData) {
             Object.keys(cData).forEach(crimeKey => {
-              const locs = cData[crimeKey]?.localizacoes;
-              const count = typeof cData[crimeKey]?.quantidade === 'number'
-                ? cData[crimeKey].quantidade
-                : Array.isArray(locs) ? locs.length : 0;
-              stateCrimeTotals[crimeKey] = (stateCrimeTotals[crimeKey] || 0) + count;
+              stateCrimeTotals[crimeKey] =
+                (stateCrimeTotals[crimeKey] || 0) + getEntryOccurrenceCount(cData[crimeKey]);
             });
           }
         });

@@ -1,14 +1,25 @@
 import { CrimeCategory, CategoryMetric, PeriodComparison, CrimeRankItem, StateBenchmark } from './types';
 import { lifeCrimesKeys, physicalCrimesKeys, patrimonyCrimesKeys, formatCrimeName } from '../../constants/CrimeData';
 
+/**
+ * Extrai a quantidade oficial de ocorrências de uma entrada criminal.
+ * Retorna zero se ausente, não numérico, NaN, infinito ou negativo.
+ * Nunca utiliza contagem de coordenadas como substituto de ocorrências.
+ */
+export const getEntryOccurrenceCount = (entry: any): number => {
+  return typeof entry?.quantidade === 'number' &&
+    Number.isFinite(entry.quantidade) &&
+    entry.quantidade >= 0
+    ? entry.quantidade
+    : 0;
+};
+
 export const calculateTotalOccurrences = (data: Record<string, any>): number => {
+  if (!data || typeof data !== 'object') return 0;
   let total = 0;
   for (const key of Object.keys(data)) {
     if (key === 'nome_da_cidade' || key === 'timestamp') continue;
-    const locs = data[key]?.localizacoes;
-    if (Array.isArray(locs)) {
-      total += locs.length;
-    }
+    total += getEntryOccurrenceCount(data[key]);
   }
   return total;
 };
@@ -18,17 +29,18 @@ export const calculateCategoryTotals = (data: Record<string, any>): Record<Crime
   let physical = 0;
   let patrimony = 0;
 
+  if (!data || typeof data !== 'object') {
+    return { life, physical, patrimony };
+  }
+
   for (const key of lifeCrimesKeys) {
-    const locs = data[key]?.localizacoes;
-    if (Array.isArray(locs)) life += locs.length;
+    life += getEntryOccurrenceCount(data[key]);
   }
   for (const key of physicalCrimesKeys) {
-    const locs = data[key]?.localizacoes;
-    if (Array.isArray(locs)) physical += locs.length;
+    physical += getEntryOccurrenceCount(data[key]);
   }
   for (const key of patrimonyCrimesKeys) {
-    const locs = data[key]?.localizacoes;
-    if (Array.isArray(locs)) patrimony += locs.length;
+    patrimony += getEntryOccurrenceCount(data[key]);
   }
 
   return { life, physical, patrimony };
@@ -56,19 +68,17 @@ export const calculateDominantCategory = (categories: CategoryMetric[]): CrimeCa
 };
 
 export const calculateDominantCrime = (data: Record<string, any>, totalOccurrences: number) => {
-  if (totalOccurrences === 0) return undefined;
+  if (!data || typeof data !== 'object' || totalOccurrences <= 0) return undefined;
 
   let maxCount = -1;
   let dominantKey = '';
 
   for (const key of Object.keys(data)) {
     if (key === 'nome_da_cidade' || key === 'timestamp') continue;
-    const locs = data[key]?.localizacoes;
-    if (Array.isArray(locs)) {
-      if (locs.length > maxCount) {
-        maxCount = locs.length;
-        dominantKey = key;
-      }
+    const count = getEntryOccurrenceCount(data[key]);
+    if (count > maxCount) {
+      maxCount = count;
+      dominantKey = key;
     }
   }
 
@@ -94,12 +104,11 @@ export const calculateTopCrimes = (
   totalOccurrences: number,
   limit: number = 5
 ): CrimeRankItem[] => {
-  if (totalOccurrences === 0) return [];
+  if (!data || typeof data !== 'object' || totalOccurrences <= 0) return [];
   const items: CrimeRankItem[] = [];
   for (const key of Object.keys(data)) {
     if (IGNORED_KEYS.includes(key)) continue;
-    const locs = data[key]?.localizacoes;
-    const total = Array.isArray(locs) ? locs.length : 0;
+    const total = getEntryOccurrenceCount(data[key]);
     if (total <= 0) continue;
     items.push({ key, name: formatCrimeName(key), total, percentage: (total / totalOccurrences) * 100 });
   }

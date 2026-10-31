@@ -301,27 +301,19 @@ export default function Dados() {
         });
 
         // Reverse geocoding via REST API (evita o Geocoder nativo instável)
-        let cidade = 'S.PAULO';
         try {
           const geoRes = await fetch(
             `https://nominatim.openstreetmap.org/reverse?lat=${loc.coords.latitude}&lon=${loc.coords.longitude}&format=json&accept-language=pt-BR`,
             { headers: { 'User-Agent': 'Gardio/1.0' } }
           );
           const geoJson = await geoRes.json();
-          if (isMounted) {
-            const nomeEncontrado = geoJson?.address?.city || geoJson?.address?.town || geoJson?.address?.municipality;
-            if (nomeEncontrado) {
-              setCityName(nomeEncontrado);
-              cidade = normalizarCidade(nomeEncontrado);
-            }
-          }
-        } catch (geoError) {
-          console.warn('Geocoder indisponível:', geoError);
-        }
+          if (!isMounted) return;
 
-        if (!isMounted) return;
+          const nomeEncontrado = geoJson?.address?.city || geoJson?.address?.town || geoJson?.address?.municipality || 'Desconhecida';
+          setCityName(nomeEncontrado);
 
-        try {
+          const cidade = normalizarCidade(nomeEncontrado);
+
           const json = await getCrimeData(2, 2026);
           if (!isMounted) return;
 
@@ -336,8 +328,8 @@ export default function Dados() {
           } else {
             console.warn('Dados criminais indisponíveis para 02/2026');
           }
-        } catch (crimeError) {
-          console.warn('Erro ao carregar dados criminais:', crimeError);
+        } catch (geoError) {
+          console.warn('Geocoder/dados indisponível:', geoError);
         }
       } catch (error) {
         console.warn('Erro ao obter localização:', error);
@@ -560,9 +552,7 @@ export default function Dados() {
     Object.keys(dadosCidade).forEach(key => {
       if (key === 'nome_da_cidade' || key === 'timestamp') return;
       const entry = dadosCidade[key];
-      const count = typeof entry?.quantidade === 'number'
-        ? entry.quantidade
-        : (Array.isArray(entry?.localizacoes) ? entry.localizacoes.length : 0);
+      const count = typeof entry?.quantidade === 'number' ? entry.quantidade : 0;
       if (count > 0) {
         counts.push({ name: key, count });
         total += count;
@@ -593,9 +583,7 @@ export default function Dados() {
 
     lifeCrimesKeys.forEach(key => {
       const entry = dadosCidade[key];
-      const count = typeof entry?.quantidade === 'number'
-        ? entry.quantidade
-        : (Array.isArray(entry?.localizacoes) ? entry.localizacoes.length : 0);
+      const count = typeof entry?.quantidade === 'number' ? entry.quantidade : 0;
       data.push({ name: formatCrimeName(key), count });
       total += count;
     });
@@ -615,9 +603,7 @@ export default function Dados() {
       if (dataMap[fName] === undefined) dataMap[fName] = 0;
 
       const entry = dadosCidade[key];
-      const count = typeof entry?.quantidade === 'number'
-        ? entry.quantidade
-        : (Array.isArray(entry?.localizacoes) ? entry.localizacoes.length : 0);
+      const count = typeof entry?.quantidade === 'number' ? entry.quantidade : 0;
       dataMap[fName] += count;
       total += count;
     });
@@ -639,9 +625,7 @@ export default function Dados() {
       if (dataMap[fName] === undefined) dataMap[fName] = 0;
 
       const entry = dadosCidade[key];
-      const count = typeof entry?.quantidade === 'number'
-        ? entry.quantidade
-        : (Array.isArray(entry?.localizacoes) ? entry.localizacoes.length : 0);
+      const count = typeof entry?.quantidade === 'number' ? entry.quantidade : 0;
       dataMap[fName] += count;
       total += count;
     });
