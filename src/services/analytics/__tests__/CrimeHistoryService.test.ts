@@ -9,6 +9,7 @@ import { ApiError } from '../../api/httpClient';
 // Mock do serviço gardioApi
 jest.mock('../../api/gardioApi', () => ({
   getLegacyPeriod: jest.fn(),
+  getPeriods: jest.fn(),
 }));
 
 describe('src/services/analytics/CrimeHistoryService.ts', () => {
@@ -16,6 +17,7 @@ describe('src/services/analytics/CrimeHistoryService.ts', () => {
   const originalFetch = global.fetch;
 
   let getLegacyPeriodMock: jest.MockedFunction<typeof import('../../api/gardioApi').getLegacyPeriod>;
+  let getPeriodsMock: jest.MockedFunction<typeof import('../../api/gardioApi').getPeriods>;
 
   const mockCrimeData = {
     'S.PAULO': {
@@ -51,6 +53,8 @@ describe('src/services/analytics/CrimeHistoryService.ts', () => {
     const gardioApiModule = require('../../api/gardioApi');
     getLegacyPeriodMock = gardioApiModule.getLegacyPeriod as any;
     getLegacyPeriodMock.mockReset();
+    getPeriodsMock = gardioApiModule.getPeriods as any;
+    getPeriodsMock.mockReset();
   });
 
   afterEach(() => {
@@ -365,6 +369,421 @@ describe('src/services/analytics/CrimeHistoryService.ts', () => {
       expect(res2).toEqual(mockCrimeData);
       // Deve ter chamado getLegacyPeriod apenas UMA vez graças à deduplicação
       expect(getLegacyPeriodMock).toHaveBeenCalledTimes(1);
+    });
+  });
+
+
+  describe('Cenários 20 a 27: fetchAvailablePeriods() - Descoberta Dinâmica de Períodos', () => {
+    const mockApiResponse = {
+      data: [
+        {
+          year: 2026,
+          month: 7,
+          period: '2026-07',
+          total_occurrences: 90319,
+          total_municipalities: 641,
+        },
+      ],
+      meta: {
+        dataset_id: 'ssp_sp_criminal_statistics',
+        source: 'ssp_sp',
+      },
+    };
+
+    describe('Cenário 20 (Cenário 1 da Etapa 8.1): Fonte API - consulta getPeriods() e retorna período ativo informado', () => {
+      it('retorna os períodos com type="active" e metadados preservados', async () => {
+        process.env.EXPO_PUBLIC_CRIME_DATA_SOURCE = 'api';
+        process.env.EXPO_PUBLIC_GARDIO_API_URL = 'http://localhost:8000';
+        getPeriodsMock.mockResolvedValueOnce(mockApiResponse as any);
+
+        const service = getService();
+        const periods = await service.fetchAvailablePeriods();
+
+        expect(getPeriodsMock).toHaveBeenCalledTimes(1);
+        expect(periods).toEqual([
+          {
+            year: 2026,
+            month: 7,
+            period: '2026-07',
+            type: 'active',
+            isCompatibilityFixture: false,
+            total_occurrences: 90319,
+            total_municipalities: 641,
+            metadata: {
+              dataset_id: 'ssp_sp_criminal_statistics',
+              source: 'ssp_sp',
+            },
+          },
+        ]);
+      });
+    });
+
+    describe('Cenário 21 (Cenário 2 da Etapa 8.1): Fonte API - não apresenta fevereiro como ativo quando o backend retorna somente julho', () => {
+      it('garante que fevereiro não consta como período ativo na lista retornada pela API', async () => {
+        process.env.EXPO_PUBLIC_CRIME_DATA_SOURCE = 'api';
+        process.env.EXPO_PUBLIC_GARDIO_API_URL = 'http://localhost:8000';
+        getPeriodsMock.mockResolvedValueOnce(mockApiResponse as any);
+
+        const service = getService();
+        const periods = await service.fetchAvailablePeriods();
+
+        const feb = periods.find((p) => p.month === 2 && p.year === 2026);
+        expect(feb).toBeUndefined();
+
+        // Todos os períodos retornados devem ter type === 'active' e isCompatibilityFixture === false
+        expect(periods.every((p) => p.type === 'active' && !p.isCompatibilityFixture)).toBe(true);
+      });
+    });
+
+    describe('Cenário 22 (Cenário 3 da Etapa 8.1): Fonte Firebase - retorna fevereiro de 2026 como período legado suportado', () => {
+      it('retorna a lista estática de compatibilidade sem consultar a API', async () => {
+        process.env.EXPO_PUBLIC_CRIME_DATA_SOURCE = 'firebase';
+
+        const service = getService();
+        const periods = await service.fetchAvailablePeriods();
+
+        expect(getPeriodsMock).not.toHaveBeenCalled();
+        expect(periods).toEqual([
+          {
+            year: 2026,
+            month: 2,
+            period: '2026-02',
+            type: 'compatibility',
+            isCompatibilityFixture: true,
+            metadata: {
+              source: 'firebase_static',
+              dataset_id: 'ssp_sp_legacy_fixture',
+            },
+          },
+        ]);
+      });
+
+      it('retorna a lista estática de compatibilidade quando EXPO_PUBLIC_CRIME_DATA_SOURCE não está definida', async () => {
+        delete process.env.EXPO_PUBLIC_CRIME_DATA_SOURCE;
+
+        const service = getService();
+        const periods = await service.fetchAvailablePeriods();
+
+        expect(getPeriodsMock).not.toHaveBeenCalled();
+        expect(periods[0].period).toBe('2026-02');
+        expect(periods[0].type).toBe('compatibility');
+        expect(periods[0].isCompatibilityFixture).toBe(true);
+      });
+    });
+
+    describe('Cenário 23 (Cenário 4 da Etapa 8.1): API indisponível por erro recuperável - fallback para compatibilidade', () => {
+      beforeEach(() => {
+        process.env.EXPO_PUBLIC_CRIME_DATA_SOURCE = 'api';
+        process.env.EXPO_PUBLIC_GARDIO_API_URL = 'http://localhost:8000';
+      });
+
+      it('aciona fallback em caso de erro de rede (network)', async () => {
+        getPeriodsMock.mockRejectedValueOnce(
+          new ApiError({ kind: 'network', message: 'API unreachable' })
+        );
+
+        const service = getService();
+        const periods = await service.fetchAvailablePeriods();
+
+        expect(getPeriodsMock).toHaveBeenCalledTimes(1);
+        expect(periods).toEqual(service.STATIC_COMPATIBILITY_PERIODS);
+        expect(periods[0].type).toBe('compatibility');
+      });
+
+      it('aciona fallback em caso de timeout', async () => {
+        getPeriodsMock.mockRejectedValueOnce(
+          new ApiError({ kind: 'timeout', message: 'Timeout' })
+        );
+
+        const service = getService();
+        const periods = await service.fetchAvailablePeriods();
+
+        expect(getPeriodsMock).toHaveBeenCalledTimes(1);
+        expect(periods).toEqual(service.STATIC_COMPATIBILITY_PERIODS);
+      });
+
+      it('aciona fallback em caso de HTTP 404', async () => {
+        getPeriodsMock.mockRejectedValueOnce(
+          new ApiError({ kind: 'http', status: 404, message: 'Endpoint não encontrado' })
+        );
+
+        const service = getService();
+        const periods = await service.fetchAvailablePeriods();
+
+        expect(getPeriodsMock).toHaveBeenCalledTimes(1);
+        expect(periods).toEqual(service.STATIC_COMPATIBILITY_PERIODS);
+      });
+
+      it('aciona fallback em caso de HTTP 429 (rate limit)', async () => {
+        getPeriodsMock.mockRejectedValueOnce(
+          new ApiError({ kind: 'http', status: 429, message: 'Too Many Requests' })
+        );
+
+        const service = getService();
+        const periods = await service.fetchAvailablePeriods();
+
+        expect(getPeriodsMock).toHaveBeenCalledTimes(1);
+        expect(periods).toEqual(service.STATIC_COMPATIBILITY_PERIODS);
+      });
+
+      it('aciona fallback em caso de HTTP 500 (server error)', async () => {
+        getPeriodsMock.mockRejectedValueOnce(
+          new ApiError({ kind: 'http', status: 500, message: 'Internal Server Error' })
+        );
+
+        const service = getService();
+        const periods = await service.fetchAvailablePeriods();
+
+        expect(getPeriodsMock).toHaveBeenCalledTimes(1);
+        expect(periods).toEqual(service.STATIC_COMPATIBILITY_PERIODS);
+      });
+
+      it('aciona fallback em caso de invalid_response (payload corrompido)', async () => {
+        getPeriodsMock.mockRejectedValueOnce(
+          new ApiError({ kind: 'invalid_response', message: 'Corrupted payload' })
+        );
+
+        const service = getService();
+        const periods = await service.fetchAvailablePeriods();
+
+        expect(getPeriodsMock).toHaveBeenCalledTimes(1);
+        expect(periods).toEqual(service.STATIC_COMPATIBILITY_PERIODS);
+      });
+    });
+
+    describe('Cenário 24 (Cenário 5 da Etapa 8.1): Erros não recuperáveis - propagam erro sem fallback', () => {
+      beforeEach(() => {
+        process.env.EXPO_PUBLIC_CRIME_DATA_SOURCE = 'api';
+        process.env.EXPO_PUBLIC_GARDIO_API_URL = 'http://localhost:8000';
+      });
+
+      it('não executa fallback em caso de cancelamento (aborted)', async () => {
+        const abortError = new ApiError({ kind: 'aborted', message: 'Request aborted' });
+        getPeriodsMock.mockRejectedValueOnce(abortError);
+
+        const service = getService();
+        await expect(service.fetchAvailablePeriods()).rejects.toThrow(abortError);
+      });
+
+      it('não executa fallback em caso de HTTP 401/403', async () => {
+        const authError = new ApiError({ kind: 'http', status: 401, message: 'Unauthorized' });
+        getPeriodsMock.mockRejectedValueOnce(authError);
+
+        const service = getService();
+        await expect(service.fetchAvailablePeriods()).rejects.toThrow(authError);
+
+        const forbiddenError = new ApiError({ kind: 'http', status: 403, message: 'Forbidden' });
+        getPeriodsMock.mockRejectedValueOnce(forbiddenError);
+
+        await expect(service.fetchAvailablePeriods()).rejects.toThrow(forbiddenError);
+      });
+
+      it('não executa fallback em caso de HTTP 400/422', async () => {
+        const badReqError = new ApiError({ kind: 'http', status: 400, message: 'Bad Request' });
+        getPeriodsMock.mockRejectedValueOnce(badReqError);
+
+        const service = getService();
+        await expect(service.fetchAvailablePeriods()).rejects.toThrow(badReqError);
+
+        const unprocessableError = new ApiError({ kind: 'http', status: 422, message: 'Unprocessable' });
+        getPeriodsMock.mockRejectedValueOnce(unprocessableError);
+
+        await expect(service.fetchAvailablePeriods()).rejects.toThrow(unprocessableError);
+      });
+
+      it('não executa fallback em caso de erro de configuração', async () => {
+        const configError = new Error('URL da API não definida');
+        getPeriodsMock.mockRejectedValueOnce(configError);
+
+        const service = getService();
+        await expect(service.fetchAvailablePeriods()).rejects.toThrow(configError);
+      });
+    });
+
+    describe('Cenário 25 (Cenário 6 da Etapa 8.1): Resposta válida vazia - retorna lista vazia', () => {
+      it('preserva array vazio sem acionar fallback para fevereiro', async () => {
+        process.env.EXPO_PUBLIC_CRIME_DATA_SOURCE = 'api';
+        process.env.EXPO_PUBLIC_GARDIO_API_URL = 'http://localhost:8000';
+        getPeriodsMock.mockResolvedValueOnce({
+          data: [],
+          meta: { dataset_id: 'ssp_sp_criminal_statistics' },
+        });
+
+        const service = getService();
+        const periods = await service.fetchAvailablePeriods();
+
+        expect(getPeriodsMock).toHaveBeenCalledTimes(1);
+        expect(periods).toEqual([]);
+        expect(periods.length).toBe(0);
+      });
+    });
+
+    describe('Cenário 26 (Cenário 7 da Etapa 8.1): Cache e deduplicação de requisições simultâneas', () => {
+      beforeEach(() => {
+        process.env.EXPO_PUBLIC_CRIME_DATA_SOURCE = 'api';
+        process.env.EXPO_PUBLIC_GARDIO_API_URL = 'http://localhost:8000';
+      });
+
+      it('chamadas simultâneas não duplicam requisições (deduplicação via Promise em voo)', async () => {
+        getPeriodsMock.mockImplementation(
+          () =>
+            new Promise((resolve) => {
+              setTimeout(() => resolve(mockApiResponse as any), 20);
+            })
+        );
+
+        const service = getService();
+
+        const [res1, res2, res3] = await Promise.all([
+          service.fetchAvailablePeriods(),
+          service.fetchAvailablePeriods(),
+          service.fetchAvailablePeriods(),
+        ]);
+
+        expect(res1).toEqual(res2);
+        expect(res2).toEqual(res3);
+        expect(getPeriodsMock).toHaveBeenCalledTimes(1);
+      });
+
+      it('chamadas subsequentes reutilizam o cache quando forceRefresh = false', async () => {
+        getPeriodsMock.mockResolvedValue(mockApiResponse as any);
+
+        const service = getService();
+
+        // 1ª chamada: busca via API
+        const res1 = await service.fetchAvailablePeriods();
+        expect(res1.length).toBe(1);
+        expect(getPeriodsMock).toHaveBeenCalledTimes(1);
+
+        // 2ª chamada: deve vir do cache
+        const res2 = await service.fetchAvailablePeriods();
+        expect(res2).toEqual(res1);
+        expect(getPeriodsMock).toHaveBeenCalledTimes(1);
+
+        // 3ª chamada com forceRefresh = true: deve disparar nova requisição
+        const res3 = await service.fetchAvailablePeriods(true);
+        expect(res3).toEqual(res1);
+        expect(getPeriodsMock).toHaveBeenCalledTimes(2);
+      });
+    });
+
+    describe('Cenário 27 (Cenário 8 da Etapa 8.1): Regressão - fetchAvailableHistory() continua funcionando e utilizando 02/2026', () => {
+      it('fetchAvailableHistory() continua buscando dados de 2/2026 sem alteração de comportamento', async () => {
+        delete process.env.EXPO_PUBLIC_CRIME_DATA_SOURCE;
+        (global as any).fetch = jest.fn<any>().mockResolvedValue(mockFetchResponse(200, mockCrimeData));
+
+        const service = getService();
+        const history = await service.fetchAvailableHistory();
+
+        expect(history.length).toBe(1);
+        expect(history[0].year).toBe(2026);
+        expect(history[0].month).toBe(2);
+        expect(history[0].data).toEqual(mockCrimeData);
+      });
+    });
+
+    describe('fetchSelectablePeriods() (Etapa 8.4A)', () => {
+      beforeEach(() => {
+        process.env.EXPO_PUBLIC_CRIME_DATA_SOURCE = 'api';
+        process.env.EXPO_PUBLIC_GARDIO_API_URL = 'http://localhost:8000';
+      });
+
+      it('Cenário 1: API saudável retorna julho ativo e fevereiro de compatibilidade ordenados decrescente', async () => {
+        getPeriodsMock.mockResolvedValue({
+          data: [
+            {
+              year: 2026,
+              month: 7,
+              period: '2026-07',
+              type: 'active',
+              total_occurrences: 90319,
+              total_municipalities: 641,
+            },
+          ],
+          meta: {
+            total_active_periods: 1,
+            latest_active_period: '2026-07',
+            generated_at: '2026-11-02T10:00:00Z',
+          },
+        } as any);
+
+        const service = getService();
+        const periods = await service.fetchSelectablePeriods();
+
+        expect(periods.length).toBe(2);
+        expect(periods[0].period).toBe('2026-07');
+        expect(periods[0].type).toBe('active');
+        expect(periods[0].isCompatibilityFixture).toBe(false);
+
+        expect(periods[1].period).toBe('2026-02');
+        expect(periods[1].type).toBe('compatibility');
+        expect(periods[1].isCompatibilityFixture).toBe(true);
+      });
+
+      it('Cenário 2: Firebase disponibiliza apenas períodos de compatibilidade (fevereiro/2026)', async () => {
+        process.env.EXPO_PUBLIC_CRIME_DATA_SOURCE = 'firebase';
+
+        const service = getService();
+        const periods = await service.fetchSelectablePeriods();
+
+        expect(periods.length).toBe(1);
+        expect(periods[0].period).toBe('2026-02');
+        expect(periods[0].type).toBe('compatibility');
+        expect(getPeriodsMock).not.toHaveBeenCalled();
+      });
+
+      it('Cenário 3: API indisponível disponibiliza fevereiro por compatibilidade', async () => {
+        getPeriodsMock.mockRejectedValue(
+          new ApiError({ kind: 'network', message: 'API offline' })
+        );
+
+        const service = getService();
+        const periods = await service.fetchSelectablePeriods();
+
+        expect(periods.length).toBe(1);
+        expect(periods[0].period).toBe('2026-02');
+        expect(periods[0].type).toBe('compatibility');
+      });
+
+      it('Cenário 4: Catálogo ativo vazio não impede a seleção do período de compatibilidade', async () => {
+        getPeriodsMock.mockResolvedValue({
+          data: [],
+          meta: {
+            total_active_periods: 0,
+            latest_active_period: null,
+            generated_at: '2026-11-02T10:00:00Z',
+          },
+        } as any);
+
+        const service = getService();
+        const periods = await service.fetchSelectablePeriods();
+
+        expect(periods.length).toBe(1);
+        expect(periods[0].period).toBe('2026-02');
+        expect(periods[0].type).toBe('compatibility');
+      });
+
+      it('Cenário 5 e 6: Períodos duplicados não aparecem duas vezes e active prevalece sobre compatibility', async () => {
+        getPeriodsMock.mockResolvedValue({
+          data: [
+            {
+              year: 2026,
+              month: 2,
+              period: '2026-02',
+              type: 'active',
+              total_occurrences: 90321,
+              total_municipalities: 642,
+            },
+          ],
+        } as any);
+
+        const service = getService();
+        const periods = await service.fetchSelectablePeriods();
+
+        expect(periods.length).toBe(1);
+        expect(periods[0].period).toBe('2026-02');
+        expect(periods[0].type).toBe('active');
+      });
     });
   });
 });

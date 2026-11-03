@@ -7,19 +7,30 @@ import { describe, it, expect, beforeEach, afterAll, jest } from '@jest/globals'
 import {
   validateApiBaseUrl,
   getCrimeDataSource,
+  getApiBaseUrl,
   apiConfig,
 } from '../../../config/api';
 
 describe('src/config/api.ts', () => {
-  const originalEnv = process.env;
+  const originalEnv = { ...process.env };
 
   beforeEach(() => {
     jest.resetModules();
-    process.env = { ...originalEnv };
+    for (const key of Object.keys(process.env)) {
+      if (!(key in originalEnv)) {
+        delete process.env[key];
+      }
+    }
+    Object.assign(process.env, originalEnv);
   });
 
   afterAll(() => {
-    process.env = originalEnv;
+    for (const key of Object.keys(process.env)) {
+      if (!(key in originalEnv)) {
+        delete process.env[key];
+      }
+    }
+    Object.assign(process.env, originalEnv);
   });
 
   describe('getCrimeDataSource', () => {
@@ -35,9 +46,16 @@ describe('src/config/api.ts', () => {
       expect(apiConfig.source).toBe('api');
     });
 
+    it('deve aceitar explicitamente "firebase"', () => {
+      process.env.EXPO_PUBLIC_CRIME_DATA_SOURCE = 'firebase';
+      expect(getCrimeDataSource()).toBe('firebase');
+      expect(apiConfig.source).toBe('firebase');
+    });
+
     it('deve adotar "firebase" caso um valor desconhecido seja informado', () => {
       process.env.EXPO_PUBLIC_CRIME_DATA_SOURCE = 'outro_valor';
       expect(getCrimeDataSource()).toBe('firebase');
+      expect(apiConfig.source).toBe('firebase');
     });
   });
 
@@ -94,6 +112,19 @@ describe('src/config/api.ts', () => {
     it('aceita HTTPS tanto em desenvolvimento quanto em produção', () => {
       expect(validateApiBaseUrl('https://api.gardio.br', true)).toBe('https://api.gardio.br');
       expect(validateApiBaseUrl('https://api.gardio.br', false)).toBe('https://api.gardio.br');
+    });
+  });
+
+  describe('getApiBaseUrl e apiConfig.getBaseUrl', () => {
+    it('lê e valida corretamente a URL a partir de EXPO_PUBLIC_GARDIO_API_URL', () => {
+      process.env.EXPO_PUBLIC_GARDIO_API_URL = 'http://10.0.2.2:8000';
+      expect(getApiBaseUrl()).toBe('http://10.0.2.2:8000');
+      expect(apiConfig.getBaseUrl()).toBe('http://10.0.2.2:8000');
+    });
+
+    it('lança erro ao chamar getBaseUrl quando EXPO_PUBLIC_GARDIO_API_URL não estiver definida', () => {
+      delete process.env.EXPO_PUBLIC_GARDIO_API_URL;
+      expect(() => apiConfig.getBaseUrl()).toThrow(/EXPO_PUBLIC_GARDIO_API_URL/);
     });
   });
 });

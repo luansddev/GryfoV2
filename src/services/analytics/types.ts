@@ -64,6 +64,12 @@ export interface StateBenchmark {
     /** % de cidades que têm taxa MAIOR que a desta cidade */
     lowerThanPct: number;
   };
+  /** Indicadores adicionais de cobertura fornecidos pelo backend analítico */
+  coveredMunicipalities?: number | null;
+  coveredPopulation?: number | null;
+  coveredRatePer100k?: number | null;
+  statePopulation?: number | null;
+  isPartialCoverage?: boolean;
 }
 
 export interface AnalysisResult {

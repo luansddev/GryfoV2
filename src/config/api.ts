@@ -70,25 +70,11 @@ export function validateApiBaseUrl(
 
 /**
  * Retorna a fonte de dados criminais ativa com base em EXPO_PUBLIC_CRIME_DATA_SOURCE.
- * Padrão seguro: 'firebase'.
- */
-/**
- * Obtém o valor de uma variável de ambiente de forma compatível com transformações
- * estáticas e dinâmicas de bundlers (Metro/Babel/Jest).
- */
-function readEnv(key: string): string | undefined {
-  if (typeof process !== 'undefined' && process && process.env) {
-    return (process as unknown as { env: Record<string, string | undefined> }).env[key];
-  }
-  return undefined;
-}
-
-/**
- * Retorna a fonte de dados criminais ativa com base em EXPO_PUBLIC_CRIME_DATA_SOURCE.
+ * Utiliza referência estática direta para permitir inlining em tempo de build pelo Expo/Metro.
  * Padrão seguro: 'firebase'.
  */
 export function getCrimeDataSource(): CrimeDataSource {
-  const envVal = readEnv('EXPO_PUBLIC_CRIME_DATA_SOURCE')?.trim().toLowerCase();
+  const envVal = process.env.EXPO_PUBLIC_CRIME_DATA_SOURCE?.trim().toLowerCase();
   if (envVal === 'api') {
     return 'api';
   }
@@ -96,12 +82,12 @@ export function getCrimeDataSource(): CrimeDataSource {
 }
 
 /**
- * Retorna a URL base validada da API lendo de process.env.EXPO_PUBLIC_GARDIO_API_URL.
+ * Retorna a URL base validada da API lendo estaticamente de process.env.EXPO_PUBLIC_GARDIO_API_URL.
  * Lança erro caso a URL esteja ausente ou viole as regras de protocolo.
  */
 export function getApiBaseUrl(): string {
   return validateApiBaseUrl(
-    readEnv('EXPO_PUBLIC_GARDIO_API_URL'),
+    process.env.EXPO_PUBLIC_GARDIO_API_URL,
     isDevelopmentEnvironment()
   );
 }

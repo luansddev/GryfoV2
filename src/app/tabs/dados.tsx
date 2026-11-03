@@ -22,7 +22,19 @@ import * as Location from 'expo-location';
 import { useSearchLocation } from '../../context/SearchLocationContext';
 import { normalizarCidade } from '../../context/Normalizer';
 import { prettifySspKey } from '../../services/analytics/CityDirectory';
-import { getCrimeData, RawCrimeData } from '../../services/analytics/CrimeHistoryService';
+import {
+  getCrimeData,
+  fetchCrimeDataForPeriod,
+  fetchSelectablePeriods,
+  CrimePeriodInfo,
+  RawCrimeData,
+} from '../../services/analytics/CrimeHistoryService';
+import {
+  DEFAULT_COMPATIBILITY_PERIOD,
+  formatPeriodLongName,
+  formatPeriodShortName,
+  formatPeriodStatusLabel,
+} from '../../services/analytics/periodHelpers';
 
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
@@ -218,6 +230,15 @@ export default function Dados() {
   const [allCitiesData, setAllCitiesData] = useState<any>(null);
   const [mapExpanded, setMapExpanded] = useState(true);
 
+  // Controle de períodos selecionáveis
+  const [availablePeriods, setAvailablePeriods] = useState<CrimePeriodInfo[]>([DEFAULT_COMPATIBILITY_PERIOD]);
+  const [selectedPeriod, setSelectedPeriod] = useState<CrimePeriodInfo>(DEFAULT_COMPATIBILITY_PERIOD);
+  const [isPeriodModalOpen, setIsPeriodModalOpen] = useState(false);
+  const [isPeriodLoading, setIsPeriodLoading] = useState(false);
+  const [periodError, setPeriodError] = useState<string | null>(null);
+  const periodRequestIdRef = useRef(0);
+  const activeCityKeyRef = useRef<string>('S.PAULO');
+
   const [selectedTab, setSelectedTab] = useState<'general' | 'life' | 'physical' | 'patrimony'>('general');
   const [dropdownOpen, setDropdownOpen] = useState(false);
 
@@ -232,6 +253,67 @@ export default function Dados() {
     setModalNatureDropdownOpen(false);
     setIsFilterDropdownOpen(false);
   };
+
+  const loadCrimeDataForPeriod = useCallback(async (period: CrimePeriodInfo, targetCity?: string) => {
+    const requestId = ++periodRequestIdRef.current;
+    setIsPeriodLoading(true);
+    setPeriodError(null);
+    // Limpa imediatamente os dados do período anterior para não exibir dados obsoletos durante o carregamento
+    setAllCitiesData(null);
+    setDadosCidade(null);
+
+    try {
+      const json = await fetchCrimeDataForPeriod(period.month, period.year);
+      if (periodRequestIdRef.current !== requestId) return;
+
+      if (json) {
+        setAllCitiesData(json);
+        const cityToUse = activeCityKeyRef.current || targetCity || 'S.PAULO';
+        const defaultCity = json[cityToUse] ? cityToUse : 'S.PAULO';
+        setDadosCidade(json[defaultCity] || null);
+        activeCityKeyRef.current = defaultCity;
+      } else {
+        setAllCitiesData(null);
+        setDadosCidade(null);
+        setPeriodError(
+          `Dados criminais indisponíveis para ${formatPeriodLongName(period.month, period.year)}`
+        );
+      }
+    } catch (err) {
+      if (periodRequestIdRef.current !== requestId) return;
+      setAllCitiesData(null);
+      setDadosCidade(null);
+      setPeriodError(
+        `Falha ao carregar dados de ${formatPeriodLongName(period.month, period.year)}`
+      );
+      console.warn('Erro ao carregar dados do período:', err);
+    } finally {
+      if (periodRequestIdRef.current === requestId) {
+        setIsPeriodLoading(false);
+      }
+    }
+  }, []);
+
+  const handleSelectPeriod = (period: CrimePeriodInfo, force: boolean = false) => {
+    setIsPeriodModalOpen(false);
+    if (!force && !periodError && period.year === selectedPeriod.year && period.month === selectedPeriod.month) {
+      return;
+    }
+    setSelectedPeriod(period);
+    loadCrimeDataForPeriod(period, activeCityKeyRef.current);
+  };
+
+  useEffect(() => {
+    fetchSelectablePeriods()
+      .then((periods) => {
+        if (periods && periods.length > 0) {
+          setAvailablePeriods(periods);
+        }
+      })
+      .catch((err) => {
+        console.warn('Erro ao carregar períodos selecionáveis:', err);
+      });
+  }, []);
 
   const translateY = useSharedValue(Dimensions.get('window').height);
 
@@ -313,20 +395,15 @@ export default function Dados() {
           setCityName(nomeEncontrado);
 
           const cidade = normalizarCidade(nomeEncontrado);
+          activeCityKeyRef.current = cidade;
 
-          const json = await getCrimeData(2, 2026);
+          await loadCrimeDataForPeriod(DEFAULT_COMPATIBILITY_PERIOD, cidade);
           if (!isMounted) return;
 
-          if (json) {
-            setAllCitiesData(json);
-            // Se não encontrou a cidade em SP, ou se o usuário estiver fora, vamos padronizar para "S.PAULO" caso não ache
-            const defaultCity = json[cidade] ? cidade : 'S.PAULO';
-            setDadosCidade(json[defaultCity] || null);
-            if (!json[cidade]) {
-              setCityName('São Paulo');
-            }
+          if (nomeEncontrado && nomeEncontrado !== 'Desconhecida') {
+            setCityName(nomeEncontrado);
           } else {
-            console.warn('Dados criminais indisponíveis para 02/2026');
+            setCityName('São Paulo');
           }
         } catch (geoError) {
           console.warn('Geocoder/dados indisponível:', geoError);
@@ -346,6 +423,7 @@ export default function Dados() {
     if (!allCitiesData) return;
 
     if (searchMode && searchedCity && searchedLocation) {
+      activeCityKeyRef.current = searchedCity;
       // O usuário buscou uma cidade, então atualizamos os dados
       setDadosCidade(allCitiesData[searchedCity] || null);
       
@@ -362,6 +440,7 @@ export default function Dados() {
     } else if (!searchMode && userCity) {
       // Voltou ao modo normal (desativou a busca)
       const defaultCity = allCitiesData[userCity] ? userCity : 'S.PAULO';
+      activeCityKeyRef.current = defaultCity;
       setDadosCidade(allCitiesData[defaultCity] || null);
       
       if (userLocation) {
@@ -854,6 +933,20 @@ export default function Dados() {
               </TouchableOpacity>
 
               <TouchableOpacity
+                style={styles.periodFab}
+                onPress={() => setIsPeriodModalOpen(true)}
+                activeOpacity={0.8}
+              >
+                <FontAwesome6 name="calendar-days" size={13} color="#1e293b" />
+                <Text style={styles.periodFabText} numberOfLines={1}>
+                  {formatPeriodShortName(selectedPeriod.month, selectedPeriod.year)}
+                </Text>
+                {selectedPeriod.type === 'active' && (
+                  <View style={styles.periodActiveBadgeDot} />
+                )}
+              </TouchableOpacity>
+
+              <TouchableOpacity
                 style={styles.filterIconBtn}
                 onPress={() => setIsFilterDropdownOpen(true)}
                 activeOpacity={0.8}
@@ -1041,7 +1134,16 @@ export default function Dados() {
         {/* BOTÃO EM DESTAQUE: VER ANÁLISE APURADA */}
         <TouchableOpacity
           style={styles.analysisCtaButton}
-          onPress={() => router.push('/analise')}
+          onPress={() => {
+            router.push({
+              pathname: '/analise',
+              params: {
+                year: String(selectedPeriod.year),
+                month: String(selectedPeriod.month),
+                type: selectedPeriod.type,
+              },
+            });
+          }}
           activeOpacity={0.85}
         >
           <LinearGradient
@@ -1062,6 +1164,73 @@ export default function Dados() {
             </View>
           </LinearGradient>
         </TouchableOpacity>
+
+        {/* SELETOR DE PERÍODO NA FOLHA RETRÁTIL */}
+        <View style={styles.periodCardContainer}>
+          <TouchableOpacity
+            style={styles.periodCardTrigger}
+            onPress={() => setIsPeriodModalOpen(true)}
+            activeOpacity={0.8}
+          >
+            <View style={styles.periodCardLeft}>
+              <View style={styles.periodCardIconWrap}>
+                <FontAwesome6 name="calendar-days" size={15} color="#2563eb" />
+              </View>
+              <View>
+                <Text style={styles.periodCardLabel}>Período dos dados</Text>
+                <Text style={styles.periodCardValue}>
+                  {formatPeriodLongName(selectedPeriod.month, selectedPeriod.year)}
+                </Text>
+              </View>
+            </View>
+            <View style={styles.periodCardRight}>
+              {!!formatPeriodStatusLabel(selectedPeriod.type) && (
+                <View
+                  style={[
+                    styles.periodBadge,
+                    selectedPeriod.type === 'active'
+                      ? styles.periodBadgeActive
+                      : styles.periodBadgeCompatibility,
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.periodBadgeText,
+                      selectedPeriod.type === 'active'
+                        ? styles.periodBadgeTextActive
+                        : styles.periodBadgeTextCompatibility,
+                    ]}
+                  >
+                    {formatPeriodStatusLabel(selectedPeriod.type)}
+                  </Text>
+                </View>
+              )}
+              <FontAwesome6 name="chevron-down" size={12} color="#64748b" style={{ marginLeft: 6 }} />
+            </View>
+          </TouchableOpacity>
+
+          {isPeriodLoading && (
+            <View style={styles.periodLoadingRow}>
+              <ActivityIndicator size="small" color="#2563eb" />
+              <Text style={styles.periodLoadingText}>Carregando dados do período...</Text>
+            </View>
+          )}
+
+          {periodError && (
+            <View style={styles.periodErrorCard}>
+              <FontAwesome6 name="triangle-exclamation" size={14} color="#dc2626" />
+              <Text style={styles.periodErrorText} numberOfLines={2}>
+                {periodError}
+              </Text>
+              <TouchableOpacity
+                style={styles.periodRetryBtn}
+                onPress={() => handleSelectPeriod(selectedPeriod, true)}
+              >
+                <Text style={styles.periodRetryBtnText}>Tentar novamente</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+        </View>
 
         {/* SELETOR DE CATEGORIAS VIA DROPDOWN ESTILIZADO */}
         {(() => {
@@ -1322,6 +1491,119 @@ export default function Dados() {
           </View>
         )}
       </Animated.ScrollView>
+
+      {/* MODAL DE SELEÇÃO DE PERÍODO */}
+      <Modal
+        visible={isPeriodModalOpen}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setIsPeriodModalOpen(false)}
+      >
+        <TouchableOpacity
+          style={styles.periodModalOverlay}
+          activeOpacity={1}
+          onPress={() => setIsPeriodModalOpen(false)}
+        >
+          <TouchableOpacity
+            style={styles.periodModalContent}
+            activeOpacity={1}
+            onPress={(e) => e.stopPropagation()}
+          >
+            <View style={styles.periodModalHeader}>
+              <View>
+                <Text style={styles.periodModalTitle}>Selecionar Período</Text>
+                <Text style={styles.periodModalSubtitle}>
+                  Estatísticas criminais consolidadas
+                </Text>
+              </View>
+              <TouchableOpacity
+                style={styles.periodModalCloseBtn}
+                onPress={() => setIsPeriodModalOpen(false)}
+              >
+                <FontAwesome6 name="xmark" size={16} color="#64748b" />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={styles.periodModalList} showsVerticalScrollIndicator={false}>
+              {availablePeriods.map((period) => {
+                const isSelected =
+                  period.month === selectedPeriod.month &&
+                  period.year === selectedPeriod.year;
+                const isActive = period.type === 'active';
+
+                return (
+                  <TouchableOpacity
+                    key={`${period.year}-${period.month}`}
+                    style={[
+                      styles.periodModalItem,
+                      isSelected && styles.periodModalItemSelected,
+                    ]}
+                    onPress={() => handleSelectPeriod(period)}
+                    activeOpacity={0.7}
+                  >
+                    <View style={styles.periodModalItemLeft}>
+                      <View
+                        style={[
+                          styles.periodModalItemIconWrap,
+                          isSelected && styles.periodModalItemIconWrapSelected,
+                        ]}
+                      >
+                        <FontAwesome6
+                          name="calendar"
+                          size={13}
+                          color={isSelected ? '#2563eb' : '#64748b'}
+                        />
+                      </View>
+                      <View>
+                        <Text
+                          style={[
+                            styles.periodModalItemName,
+                            isSelected && styles.periodModalItemNameSelected,
+                          ]}
+                        >
+                          {formatPeriodLongName(period.month, period.year)}
+                        </Text>
+                        <View style={styles.periodModalItemMeta}>
+                          <View
+                            style={[
+                              styles.periodBadgeSmall,
+                              isActive
+                                ? styles.periodBadgeActive
+                                : styles.periodBadgeCompatibility,
+                            ]}
+                          >
+                            <Text
+                              style={[
+                                styles.periodBadgeSmallText,
+                                isActive
+                                  ? styles.periodBadgeTextActive
+                                  : styles.periodBadgeTextCompatibility,
+                              ]}
+                            >
+                              {formatPeriodStatusLabel(period.type)}
+                            </Text>
+                          </View>
+                          {isActive && (
+                            <Text style={styles.periodModalMetaDetail}>
+                              API Gardio · 90k+ registros
+                            </Text>
+                          )}
+                        </View>
+                      </View>
+                    </View>
+
+                    {isSelected && (
+                      <View style={styles.periodModalCheckWrap}>
+                        <FontAwesome6 name="check" size={14} color="#2563eb" />
+                      </View>
+                    )}
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
     </View>
   );
 }
@@ -2255,6 +2537,255 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontFamily: 'GlacialR',
     color: '#94a3b8',
+  },
+
+  /* ================= SELETOR DE PERÍODO ================= */
+  periodFab: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#ffffff',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 24,
+    elevation: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 4,
+    gap: 6,
+  },
+  periodFabText: {
+    fontSize: 12,
+    fontFamily: 'texgyB',
+    color: '#1e293b',
+  },
+  periodActiveBadgeDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#2563eb',
+  },
+  periodCardContainer: {
+    marginHorizontal: 16,
+    marginBottom: 12,
+  },
+  periodCardTrigger: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#ffffff',
+    borderRadius: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 3,
+  },
+  periodCardLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  periodCardIconWrap: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: '#eff6ff',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  periodCardLabel: {
+    fontSize: 10,
+    fontFamily: 'GlacialR',
+    color: '#64748b',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  periodCardValue: {
+    fontSize: 14,
+    fontFamily: 'texgyB',
+    color: '#0f172a',
+  },
+  periodCardRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  periodBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 12,
+  },
+  periodBadgeSmall: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 8,
+  },
+  periodBadgeActive: {
+    backgroundColor: '#dbeafe',
+  },
+  periodBadgeCompatibility: {
+    backgroundColor: '#f1f5f9',
+  },
+  periodBadgeText: {
+    fontSize: 10,
+    fontFamily: 'texgyB',
+  },
+  periodBadgeSmallText: {
+    fontSize: 9,
+    fontFamily: 'texgyB',
+  },
+  periodBadgeTextActive: {
+    color: '#1d4ed8',
+  },
+  periodBadgeTextCompatibility: {
+    color: '#64748b',
+  },
+  periodLoadingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 6,
+    paddingHorizontal: 6,
+  },
+  periodLoadingText: {
+    fontSize: 11,
+    fontFamily: 'GlacialR',
+    color: '#2563eb',
+  },
+  periodErrorCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#fef2f2',
+    borderWidth: 1,
+    borderColor: '#fecaca',
+    borderRadius: 12,
+    padding: 10,
+    marginTop: 8,
+    gap: 8,
+  },
+  periodErrorText: {
+    flex: 1,
+    fontSize: 11,
+    fontFamily: 'texgyR',
+    color: '#991b1b',
+  },
+  periodRetryBtn: {
+    backgroundColor: '#dc2626',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  periodRetryBtnText: {
+    color: '#ffffff',
+    fontSize: 10,
+    fontFamily: 'texgyB',
+  },
+  periodModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.45)',
+    justifyContent: 'flex-end',
+  },
+  periodModalContent: {
+    backgroundColor: '#ffffff',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingTop: 20,
+    paddingHorizontal: 20,
+    paddingBottom: 34,
+    maxHeight: '65%',
+  },
+  periodModalHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    marginBottom: 16,
+  },
+  periodModalTitle: {
+    fontSize: 17,
+    fontFamily: 'texgyB',
+    color: '#0f172a',
+  },
+  periodModalSubtitle: {
+    fontSize: 12,
+    fontFamily: 'GlacialR',
+    color: '#64748b',
+    marginTop: 2,
+  },
+  periodModalCloseBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#f1f5f9',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  periodModalList: {
+    marginTop: 4,
+  },
+  periodModalItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    marginBottom: 8,
+    backgroundColor: '#f8fafc',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
+  periodModalItemSelected: {
+    backgroundColor: '#eff6ff',
+    borderColor: '#93c5fd',
+  },
+  periodModalItemLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    flex: 1,
+  },
+  periodModalItemIconWrap: {
+    width: 34,
+    height: 34,
+    borderRadius: 10,
+    backgroundColor: '#e2e8f0',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  periodModalItemIconWrapSelected: {
+    backgroundColor: '#dbeafe',
+  },
+  periodModalItemName: {
+    fontSize: 14,
+    fontFamily: 'texgyB',
+    color: '#1e293b',
+  },
+  periodModalItemNameSelected: {
+    color: '#1d4ed8',
+  },
+  periodModalItemMeta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 3,
+  },
+  periodModalMetaDetail: {
+    fontSize: 10,
+    fontFamily: 'GlacialR',
+    color: '#64748b',
+  },
+  periodModalCheckWrap: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: '#dbeafe',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 
 });

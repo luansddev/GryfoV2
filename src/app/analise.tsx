@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import {
   View,
   Text,
@@ -19,7 +19,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { FontAwesome6 } from '@expo/vector-icons';
 import { LineChart } from 'react-native-chart-kit';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import Animated, {
   FadeInDown,
   useSharedValue,
@@ -29,6 +29,14 @@ import Animated, {
 } from 'react-native-reanimated';
 import { useSearchLocation } from '../context/SearchLocationContext';
 import { useCrimeAnalysis } from '../hooks/useCrimeAnalysis';
+import {
+  parsePeriodParams,
+  reconcilePeriodClassification,
+  isPeriodClassificationConfirmed,
+  formatPeriodLongName,
+  formatPeriodStatusLabel,
+} from '../services/analytics/periodHelpers';
+import { fetchSelectablePeriods, CrimePeriodInfo } from '../services/analytics/CrimeHistoryService';
 import {
   getCrimeIcon,
   formatCrimeName,
@@ -130,17 +138,26 @@ function StateMessage({
 /* Seções da análise                                                   */
 /* ================================================================== */
 
-function Hero({ analysis }: { analysis: AnalysisResult }) {
+function Hero({
+  analysis,
+  selectedPeriod,
+  isPeriodConfirmed = false,
+}: {
+  analysis: AnalysisResult;
+  selectedPeriod?: CrimePeriodInfo;
+  isPeriodConfirmed?: boolean;
+}) {
   const { width: windowWidth } = useWindowDimensions();
   const [cardWidth, setCardWidth] = useState(windowWidth - 32);
   const { displayName, population, totalOccurrences, ratePer100k, benchmark, dataQuality } = analysis;
-  const verdict = getVerdict(ratePer100k, benchmark?.stateRatePer100k);
+  const verdict = !benchmark?.isPartialCoverage ? getVerdict(ratePer100k, benchmark?.stateRatePer100k) : null;
   const v = verdict ? VERDICT_META[verdict.verdict] : null;
 
   const bgWidth = cardWidth > 0 ? cardWidth : windowWidth - 32;
   const bgHeight = Math.round((bgWidth * 1308) / 736);
 
   const isSmall = cardWidth < 360;
+  const showBadge = isPeriodConfirmed && selectedPeriod && !!formatPeriodStatusLabel(selectedPeriod.type);
 
   return (
     <Animated.View entering={FadeInDown.duration(450)} style={styles.heroShadow}>
@@ -174,7 +191,32 @@ function Hero({ analysis }: { analysis: AnalysisResult }) {
         <View style={[styles.heroContent, isSmall && styles.heroContentSmall]}>
           <View style={styles.heroChip}>
             <FontAwesome6 name="calendar" size={10} color="#e0e7ff" />
-            <Text style={styles.heroChipText}>{fmtPeriodLong(dataQuality.lastPeriod)}</Text>
+            <Text style={styles.heroChipText}>
+              {selectedPeriod
+                ? formatPeriodLongName(selectedPeriod.month, selectedPeriod.year)
+                : fmtPeriodLong(dataQuality.lastPeriod)}
+            </Text>
+            {showBadge && selectedPeriod && (
+              <View
+                style={[
+                  styles.heroPeriodBadge,
+                  selectedPeriod.type === 'active'
+                    ? styles.heroPeriodBadgeActive
+                    : styles.heroPeriodBadgeCompat,
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.heroPeriodBadgeText,
+                    selectedPeriod.type === 'active'
+                      ? styles.heroPeriodBadgeTextActive
+                      : styles.heroPeriodBadgeTextCompat,
+                  ]}
+                >
+                  {formatPeriodStatusLabel(selectedPeriod.type)}
+                </Text>
+              </View>
+            )}
           </View>
 
           <Text style={styles.heroCity} numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.75}>
@@ -285,7 +327,7 @@ function Summary({ analysis }: { analysis: AnalysisResult }) {
     });
   }
 
-  const verdict = getVerdict(ratePer100k, benchmark?.stateRatePer100k);
+  const verdict = !benchmark?.isPartialCoverage ? getVerdict(ratePer100k, benchmark?.stateRatePer100k) : null;
   if (verdict) {
     const meta = VERDICT_META[verdict.verdict];
     items.push({
@@ -344,8 +386,46 @@ function Summary({ analysis }: { analysis: AnalysisResult }) {
 }
 
 function StatePosition({ analysis }: { analysis: AnalysisResult }) {
-  const { benchmark, ratePer100k } = analysis;
-  if (!benchmark?.stateRatePer100k || ratePer100k === undefined) return null;
+  const { benchmark, ratePer100k, displayName, city } = analysis;
+  if (!benchmark || ratePer100k === undefined) return null;
+
+  if (benchmark.isPartialCoverage) {
+    return (
+      <Card
+        title="Panorama estadual (amostra parcial)"
+        subtitle="Dados consolidados da amostra de municípios apurados"
+        icon="chart-pie"
+        delay={160}
+      >
+        <View style={styles.partialCoverageCard}>
+          <View style={styles.partialCoverageBadge}>
+            <FontAwesome6 name="circle-info" size={12} color="#1d4ed8" />
+            <Text style={styles.partialCoverageBadgeText}>Amostra parcial do período ativo</Text>
+          </View>
+
+          <Text style={styles.partialCoverageExplanation}>
+            O benchmark do período ativo consolida dados de{' '}
+            <Text style={styles.bold}>{benchmark.coveredMunicipalities ?? 626}</Text> de{' '}
+            <Text style={styles.bold}>645</Text> municípios paulistas
+            {benchmark.coveredPopulation ? ` (${fmtCompact(benchmark.coveredPopulation)} de habitantes apurados)` : ''}.
+            Por se tratar de cobertura parcial, a taxa geral de SP não é comparada diretamente com a taxa municipal.
+          </Text>
+
+          {benchmark.coveredRatePer100k != null && (
+            <View style={styles.partialRateBox}>
+              <Text style={styles.partialRateLabel}>Taxa da amostra apurada no estado</Text>
+              <Text style={styles.partialRateValue}>
+                {fmtRate(benchmark.coveredRatePer100k)}{' '}
+                <Text style={styles.partialRateUnit}>a cada 100 mil hab.</Text>
+              </Text>
+            </View>
+          )}
+        </View>
+      </Card>
+    );
+  }
+
+  if (!benchmark.stateRatePer100k) return null;
   const max = Math.max(ratePer100k, benchmark.stateRatePer100k) * 1.1;
 
   return (
@@ -454,6 +534,11 @@ function CategoryComparison({ analysis }: { analysis: AnalysisResult }) {
           );
         })}
       </View>
+      {benchmark.isPartialCoverage && (
+        <Text style={styles.footnote}>
+          Comparativo baseado na distribuição percentual das ocorrências na amostra apurada do estado ({benchmark.coveredMunicipalities ?? 626} municípios).
+        </Text>
+      )}
     </Card>
   );
 }
@@ -1061,9 +1146,51 @@ function SpecificCrimeView({
 
 export default function Analise() {
   const insets = useSafeAreaInsets();
+  const params = useLocalSearchParams<{ year?: string; month?: string; type?: string }>();
+  const initialPeriod = useMemo(
+    () => parsePeriodParams(params.year, params.month, params.type),
+    [params.year, params.month, params.type]
+  );
+  const isKnownCompatibility = initialPeriod.year === 2026 && initialPeriod.month === 2;
+  const [selectedPeriod, setSelectedPeriod] = useState<CrimePeriodInfo>(initialPeriod);
+  const [isPeriodConfirmed, setIsPeriodConfirmed] = useState<boolean>(isKnownCompatibility);
+
+  // Reconcilia a classificação visual com o catálogo canônico de períodos
+  useEffect(() => {
+    const isKnownCompat = initialPeriod.year === 2026 && initialPeriod.month === 2;
+    setSelectedPeriod(initialPeriod);
+    setIsPeriodConfirmed(isKnownCompat);
+
+    let isMounted = true;
+    fetchSelectablePeriods()
+      .then((catalog) => {
+        if (!isMounted) return;
+        const reconciled = reconcilePeriodClassification(initialPeriod, catalog);
+        setSelectedPeriod(reconciled);
+        setIsPeriodConfirmed(isPeriodClassificationConfirmed(reconciled, catalog));
+      })
+      .catch((err) => {
+        console.warn('Erro ao reconciliar período com catálogo:', err);
+        if (!isMounted) return;
+        if (!isKnownCompat) {
+          setSelectedPeriod((current) => ({
+            ...current,
+            type: 'unknown',
+            isCompatibilityFixture: false,
+          }));
+          setIsPeriodConfirmed(false);
+        }
+      });
+    return () => {
+      isMounted = false;
+    };
+  }, [initialPeriod]);
+
   const { searchMode, userCity, setUserCity, searchedCity, setLocation } = useSearchLocation();
   const activeCity = searchMode ? searchedCity : userCity;
-  const { analysis, loading, error, refresh } = useCrimeAnalysis(activeCity);
+  const { analysis, loading, error, refresh } = useCrimeAnalysis(activeCity, {
+    period: { year: selectedPeriod.year, month: selectedPeriod.month },
+  });
   const [refreshing, setRefreshing] = useState(false);
   const [locationLoading, setLocationLoading] = useState(!userCity && !searchMode);
   const [selectedFilter, setSelectedFilter] = useState<FilterSelection>({ type: 'general' });
@@ -1212,7 +1339,11 @@ export default function Analise() {
 
         {selectedFilter.type === 'general' ? (
           <>
-            <Hero analysis={analysis} />
+            <Hero
+              analysis={analysis}
+              selectedPeriod={selectedPeriod}
+              isPeriodConfirmed={isPeriodConfirmed}
+            />
             <Summary analysis={analysis} />
             <StatePosition analysis={analysis} />
             <Breakdown analysis={analysis} />
@@ -1234,7 +1365,7 @@ export default function Analise() {
         )}
 
         <Text style={styles.sources}>
-          Fontes: SSP-SP ({fmtPeriodLong(analysis.dataQuality.lastPeriod)})
+          Fontes: SSP-SP ({formatPeriodLongName(selectedPeriod.month, selectedPeriod.year)})
           {analysis.dataQuality.hasPopulation ? ' e IBGE (Censo 2022)' : ''}. Os números refletem apenas ocorrências
           registradas oficialmente.
         </Text>
@@ -1666,5 +1797,83 @@ const styles = StyleSheet.create({
     fontSize: 13.5,
     color: '#334155',
     lineHeight: 19,
+  },
+
+  /* ================= ESTILOS COBERTURA PARCIAL E PERÍODO ================= */
+  heroPeriodBadge: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 8,
+    marginLeft: 6,
+  },
+  heroPeriodBadgeActive: {
+    backgroundColor: 'rgba(59, 130, 246, 0.35)',
+  },
+  heroPeriodBadgeCompat: {
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+  },
+  heroPeriodBadgeText: {
+    fontFamily: 'texgyB',
+    fontSize: 9,
+    color: '#e0e7ff',
+  },
+  heroPeriodBadgeTextActive: {
+    color: '#93c5fd',
+  },
+  heroPeriodBadgeTextCompat: {
+    color: '#cbd5e1',
+  },
+  partialCoverageCard: {
+    paddingVertical: 4,
+  },
+  partialCoverageBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#eff6ff',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    alignSelf: 'flex-start',
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: '#dbeafe',
+  },
+  partialCoverageBadgeText: {
+    fontFamily: 'texgyB',
+    fontSize: 11,
+    color: '#1d4ed8',
+  },
+  partialCoverageExplanation: {
+    fontFamily: 'texgyR',
+    fontSize: 13,
+    color: '#475569',
+    lineHeight: 18,
+    marginBottom: 14,
+  },
+  partialRateBox: {
+    backgroundColor: '#f8fafc',
+    borderRadius: 12,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
+  partialRateLabel: {
+    fontFamily: 'GlacialR',
+    fontSize: 10,
+    color: '#64748b',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginBottom: 4,
+  },
+  partialRateValue: {
+    fontFamily: 'texgyB',
+    fontSize: 18,
+    color: '#1e293b',
+  },
+  partialRateUnit: {
+    fontFamily: 'texgyR',
+    fontSize: 12,
+    color: '#64748b',
   },
 });

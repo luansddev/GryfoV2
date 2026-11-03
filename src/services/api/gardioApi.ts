@@ -8,11 +8,15 @@ import {
   isLegacySspPayload,
   isPeriodsResponse,
   isHealthReadyResponse,
+  isMunicipalitySummaryResponse,
+  isStatewideBenchmarkResponse,
 } from './guards';
 import {
   LegacySspPayload,
   PeriodsResponse,
   HealthReadyResponse,
+  MunicipalitySummaryResponse,
+  StatewideBenchmarkResponse,
 } from './types';
 
 export interface RequestConfig {
@@ -30,6 +34,11 @@ export interface RequestConfig {
    * URL base customizada (útil para testes unitários ou ambientes isolados).
    */
   baseUrl?: string;
+
+  /**
+   * Se falso, desativa o mecanismo de retry.
+   */
+  retry?: boolean;
 }
 
 /**
@@ -66,6 +75,7 @@ export async function getLegacyPeriod(
     timeoutMs: config?.timeoutMs,
     signal: config?.signal,
     baseUrl: config?.baseUrl,
+    retry: config?.retry,
     validate: isLegacySspPayload,
   });
 }
@@ -82,6 +92,7 @@ export async function getPeriods(config?: RequestConfig): Promise<PeriodsRespons
     timeoutMs: config?.timeoutMs,
     signal: config?.signal,
     baseUrl: config?.baseUrl,
+    retry: config?.retry,
     validate: isPeriodsResponse,
   });
 }
@@ -98,7 +109,95 @@ export async function getHealth(config?: RequestConfig): Promise<HealthReadyResp
     timeoutMs: config?.timeoutMs,
     signal: config?.signal,
     baseUrl: config?.baseUrl,
+    retry: config?.retry,
     validate: isHealthReadyResponse,
   });
 }
 
+/**
+ * Consulta o resumo analítico executivo de um município (volume, taxa por 100k, fatias e Top 5 crimes).
+ * Endpoint: GET /v1/crime-statistics/summary
+ *
+ * Regras da API:
+ * - municipality é obrigatório (será codificado e normalizado canonicamente pela API).
+ * - year e month são opcionais.
+ * - Quando ambos são omitidos, a API resolve dinamicamente para o período ativo mais recente (ex: 2026-07).
+ * - Quando apenas um entre year ou month é informado, a API rejeita com HTTP 422.
+ *
+ * @param municipality Nome ou chave SSP do município (ex: "S.PAULO", "São José dos Campos").
+ * @param year Ano estatístico opcional (ex: 2026).
+ * @param month Mês estatístico opcional (1 a 12).
+ * @param config Configurações opcionais de timeout, cancelamento ou baseUrl.
+ * @returns Resposta com o resumo executivo e metadados.
+ */
+export async function getCrimeStatisticsSummary(
+  municipality: string,
+  year?: number,
+  month?: number,
+  config?: RequestConfig
+): Promise<MunicipalitySummaryResponse> {
+  if (!municipality || typeof municipality !== 'string' || municipality.trim().length === 0) {
+    throw new ApiError({
+      kind: 'invalid_response',
+      message: 'Município obrigatório para consulta de estatísticas analíticas.',
+    });
+  }
+
+  const params: Record<string, string | number | undefined> = {
+    municipality: municipality.trim(),
+  };
+
+  if (year !== undefined) {
+    params.year = year;
+  }
+  if (month !== undefined) {
+    params.month = month;
+  }
+
+  return getJson<MunicipalitySummaryResponse>('/v1/crime-statistics/summary', {
+    params,
+    timeoutMs: config?.timeoutMs,
+    signal: config?.signal,
+    baseUrl: config?.baseUrl,
+    retry: config?.retry,
+    validate: isMunicipalitySummaryResponse,
+  });
+}
+
+/**
+ * Consulta o benchmark analítico consolidado do Estado de São Paulo.
+ * Endpoint: GET /v1/crime-statistics/benchmark
+ *
+ * Regras da API:
+ * - year e month são opcionais.
+ * - Quando ambos são omitidos, a API resolve dinamicamente para o período ativo mais recente (ex: 2026-07).
+ * - Quando apenas um entre year ou month é informado, a API rejeita com HTTP 422.
+ *
+ * @param year Ano estatístico opcional (ex: 2026).
+ * @param month Mês estatístico opcional (1 a 12).
+ * @param config Configurações opcionais de timeout, cancelamento ou baseUrl.
+ * @returns Resposta com o benchmark estadual pré-calculado e metadados.
+ */
+export async function getCrimeStatisticsBenchmark(
+  year?: number,
+  month?: number,
+  config?: RequestConfig
+): Promise<StatewideBenchmarkResponse> {
+  const params: Record<string, number | undefined> = {};
+
+  if (year !== undefined) {
+    params.year = year;
+  }
+  if (month !== undefined) {
+    params.month = month;
+  }
+
+  return getJson<StatewideBenchmarkResponse>('/v1/crime-statistics/benchmark', {
+    params,
+    timeoutMs: config?.timeoutMs,
+    signal: config?.signal,
+    baseUrl: config?.baseUrl,
+    retry: config?.retry,
+    validate: isStatewideBenchmarkResponse,
+  });
+}

@@ -8,6 +8,11 @@ import {
   AvailablePeriod,
   PeriodsResponse,
   HealthReadyResponse,
+  TopCrimeItem,
+  MunicipalitySummary,
+  MunicipalitySummaryResponse,
+  StatewideBenchmark,
+  StatewideBenchmarkResponse,
 } from './types';
 
 /**
@@ -147,3 +152,178 @@ export function isHealthReadyResponse(value: unknown): value is HealthReadyRespo
   );
 }
 
+/**
+ * Helper interno: valida se um objeto é um Record<string, number> com números finitos e não negativos.
+ */
+function isNumberRecord(value: unknown): value is Record<string, number> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return false;
+  }
+
+  const rec = value as Record<string, unknown>;
+  for (const key of Object.keys(rec)) {
+    const val = rec[key];
+    if (typeof val !== 'number' || !Number.isFinite(val) || val < 0) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+/**
+ * Valida um único item do ranking dos crimes mais frequentes (TopCrimeItem).
+ */
+export function isTopCrimeItem(value: unknown): value is TopCrimeItem {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return false;
+  }
+
+  const v = value as Record<string, unknown>;
+  return (
+    typeof v.nature_code === 'string' &&
+    v.nature_code.length > 0 &&
+    typeof v.nature_name === 'string' &&
+    v.nature_name.length > 0 &&
+    typeof v.category === 'string' &&
+    v.category.length > 0 &&
+    typeof v.quantity === 'number' &&
+    Number.isFinite(v.quantity) &&
+    v.quantity >= 0 &&
+    typeof v.percentage === 'number' &&
+    Number.isFinite(v.percentage) &&
+    v.percentage >= 0
+  );
+}
+
+/**
+ * Valida a estrutura de dados de MunicipalitySummary retornada pela API.
+ */
+export function isMunicipalitySummary(value: unknown): value is MunicipalitySummary {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return false;
+  }
+
+  const v = value as Record<string, unknown>;
+  return (
+    typeof v.municipality_key === 'string' &&
+    v.municipality_key.length > 0 &&
+    typeof v.municipality_name === 'string' &&
+    v.municipality_name.length > 0 &&
+    typeof v.year === 'number' &&
+    Number.isInteger(v.year) &&
+    v.year >= 2000 &&
+    v.year <= 2100 &&
+    typeof v.month === 'number' &&
+    Number.isInteger(v.month) &&
+    v.month >= 1 &&
+    v.month <= 12 &&
+    typeof v.period === 'string' &&
+    /^\d{4}-\d{2}$/.test(v.period) &&
+    (v.population_2022 === null ||
+      (typeof v.population_2022 === 'number' &&
+        Number.isFinite(v.population_2022) &&
+        v.population_2022 >= 0)) &&
+    typeof v.total_occurrences === 'number' &&
+    Number.isFinite(v.total_occurrences) &&
+    v.total_occurrences >= 0 &&
+    (v.rate_per_100k === null ||
+      (typeof v.rate_per_100k === 'number' &&
+        Number.isFinite(v.rate_per_100k) &&
+        v.rate_per_100k >= 0)) &&
+    isNumberRecord(v.category_totals) &&
+    isNumberRecord(v.category_shares) &&
+    Array.isArray(v.top_crimes) &&
+    v.top_crimes.every(isTopCrimeItem)
+  );
+}
+
+/**
+ * Valida o envelope StandardResponse retornado por GET /v1/crime-statistics/summary.
+ */
+export function isMunicipalitySummaryResponse(
+  value: unknown
+): value is MunicipalitySummaryResponse {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return false;
+  }
+
+  const v = value as Record<string, unknown>;
+
+  // Rejeita envelopes comuns de erro
+  if ('detail' in v || 'error' in v) {
+    return false;
+  }
+
+  return isMunicipalitySummary(v.data);
+}
+
+/**
+ * Valida a estrutura de dados de StatewideBenchmark retornada pela API.
+ */
+export function isStatewideBenchmark(value: unknown): value is StatewideBenchmark {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return false;
+  }
+
+  const v = value as Record<string, unknown>;
+  return (
+    typeof v.state === 'string' &&
+    v.state.length > 0 &&
+    typeof v.year === 'number' &&
+    Number.isInteger(v.year) &&
+    v.year >= 2000 &&
+    v.year <= 2100 &&
+    typeof v.month === 'number' &&
+    Number.isInteger(v.month) &&
+    v.month >= 1 &&
+    v.month <= 12 &&
+    typeof v.period === 'string' &&
+    /^\d{4}-\d{2}$/.test(v.period) &&
+    typeof v.total_occurrences === 'number' &&
+    Number.isFinite(v.total_occurrences) &&
+    v.total_occurrences >= 0 &&
+    (v.state_population === null ||
+      (typeof v.state_population === 'number' &&
+        Number.isFinite(v.state_population) &&
+        v.state_population >= 0)) &&
+    (v.rate_per_100k === null ||
+      (typeof v.rate_per_100k === 'number' &&
+        Number.isFinite(v.rate_per_100k) &&
+        v.rate_per_100k >= 0)) &&
+    isNumberRecord(v.category_totals) &&
+    isNumberRecord(v.category_shares) &&
+    (v.covered_municipalities === null ||
+      (typeof v.covered_municipalities === 'number' &&
+        Number.isFinite(v.covered_municipalities) &&
+        v.covered_municipalities >= 0)) &&
+    (v.covered_population === null ||
+      (typeof v.covered_population === 'number' &&
+        Number.isFinite(v.covered_population) &&
+        v.covered_population >= 0)) &&
+    (v.covered_rate_per_100k === null ||
+      (typeof v.covered_rate_per_100k === 'number' &&
+        Number.isFinite(v.covered_rate_per_100k) &&
+        v.covered_rate_per_100k >= 0))
+  );
+}
+
+/**
+ * Valida o envelope StandardResponse retornado por GET /v1/crime-statistics/benchmark.
+ */
+export function isStatewideBenchmarkResponse(
+  value: unknown
+): value is StatewideBenchmarkResponse {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return false;
+  }
+
+  const v = value as Record<string, unknown>;
+
+  // Rejeita envelopes comuns de erro
+  if ('detail' in v || 'error' in v) {
+    return false;
+  }
+
+  return isStatewideBenchmark(v.data);
+}
